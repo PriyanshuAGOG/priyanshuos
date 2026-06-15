@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Priyanshu OS — Builder, Founder's Office Operator, AI-Native Product Thinker</title>
+<meta name="description" content="Interactive portfolio of Priyanshu Agarwal: projects, apps, websites, AI workflows, founder's office work, community building, and proof-of-work." />
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<!-- Premium libs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lenis/1.1.13/lenis.min.js"></script>
+
+<style>
+/* ============================================================
+   PRIYANSHU OS — DESIGN SYSTEM (from PRD §9)
+   ============================================================ */
+:root{
+  --black:#050505; --deep-black:#000000; --soft-black:#0B0B0B; --panel:#111111;
+  --border:#242424; --text:#F5F5F5; --muted:#A3A3A3; --dim:#6F6F6F; --soft-white:#F4F2EC;
+  --lime:#C7FF3D; --blue:#8FD8FF; --red:#FF4D4D; --gold:#C9A44C;
+  --accent:var(--lime);
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --grid-line:rgba(255,255,255,0.035);
+  --glass:rgba(255,255,255,0.045);
+  --glass-border:rgba(255,255,255,0.10);
+  --hair:rgba(255,255,255,0.08);
+  --t-micro:160ms; --t-panel:320ms; --t-page:760ms;
+  --font-display:'Space Grotesk',system-ui,sans-serif;
+  --font-body:'Inter',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--black); color:var(--text);
+  font-family:var(--font-body); line-height:1.5;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  cursor:none;
+}
+body.touch, body.reduced{cursor:auto}
+::selection{background:var(--lime); color:#050505}
+a{color:inherit; text-decoration:none}
+button{font-family:inherit; cursor:none; border:none; background:none; color:inherit}
+body.touch button, body.reduced button{cursor:pointer}
+img{max-width:100%; display:block}
+
+/* ambient background field */
+.bg-field{position:fixed; inset:0; z-index:0; pointer-events:none}
+.bg-grid{position:absolute; inset:0;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:64px 64px; mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 80%);
+  -webkit-mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 30%,transparent 80%);}
+.bg-glow{position:absolute; top:-20%; left:50%; transform:translateX(-50%);
+  width:900px; height:700px; border-radius:50%;
+  background:radial-gradient(circle, rgba(199,255,61,0.10), transparent 60%); filter:blur(40px);
+  transition:background .8s ease;}
+.bg-noise{position:absolute; inset:0; opacity:.035; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+
+/* ============================================================ CURSOR */
+.cursor-dot,.cursor-ring{position:fixed; top:0; left:0; z-index:9999; pointer-events:none;
+  border-radius:50%; mix-blend-mode:difference;}
+.cursor-dot{width:6px; height:6px; background:#fff; transform:translate(-50%,-50%)}
+.cursor-ring{width:36px; height:36px; border:1px solid rgba(255,255,255,.6);
+  transform:translate(-50%,-50%) scale(.001); transition:transform var(--t-micro) var(--ease), border-color var(--t-micro)}
+.cursor-ring.active{transform:translate(-50%,-50%) scale(1)}
+.cursor-label{position:fixed; z-index:9999; pointer-events:none; font-family:var(--font-mono);
+  font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--lime);
+  transform:translate(14px,14px); opacity:0; transition:opacity var(--t-micro)}
+.cursor-label.show{opacity:1}
+body.touch .cursor-dot,body.touch .cursor-ring,body.touch .cursor-label,
+body.reduced .cursor-dot,body.reduced .cursor-ring,body.reduced .cursor-label{display:none}
+
+/* ============================================================ BOOT */
+#boot{position:fixed; inset:0; z-index:1000; background:var(--deep-black);
+  display:flex; align-items:center; justify-content:flex-start; flex-direction:column;
+  padding:0 0 0 max(40px,8vw); justify-content:center;}
+.boot-log{font-family:var(--font-mono); font-size:13px; color:var(--muted); line-height:2.1}
+.boot-log .ln{opacity:0}
+.boot-log .ln .ok{color:var(--lime)}
+.boot-caret{display:inline-block; width:8px; height:15px; background:var(--lime);
+  margin-left:4px; animation:blink 1s steps(1) infinite; vertical-align:middle}
+@keyframes blink{50%{opacity:0}}
+#boot-skip{position:fixed; bottom:32px; right:32px; opacity:0;
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--dim); border:1px solid var(--border); padding:9px 16px; border-radius:999px;
+  transition:color var(--t-micro),border-color var(--t-micro)}
+#boot-skip:hover{color:var(--text); border-color:var(--text)}
+
+/* ============================================================ HEADER */
+header{position:fixed; top:0; left:0; right:0; z-index:90; height:72px;
+  padding:0 clamp(20px,5vw,40px); display:flex; align-items:center; justify-content:space-between;
+  transition:background var(--t-panel),border-color var(--t-panel); border-bottom:1px solid transparent;}
+header.scrolled{background:rgba(5,5,5,.72); backdrop-filter:blur(20px); border-bottom-color:var(--hair)}
+.brand{display:flex; flex-direction:column; line-height:1}
+.brand .name{font-family:var(--font-display); font-weight:700; font-size:16px; letter-spacing:.02em}
+.brand .name b{color:var(--lime)}
+.brand .sub{font-family:var(--font-mono); font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-top:4px}
+.nav{display:flex; align-items:center; gap:26px}
+.nav a{font-size:13.5px; color:var(--muted); transition:color var(--t-micro); position:relative}
+.nav a::after{content:''; position:absolute; left:0; bottom:-5px; width:0; height:1px; background:var(--lime); transition:width var(--t-micro) var(--ease)}
+.nav a:hover{color:var(--text)} .nav a:hover::after{width:100%}
+.btn-ask{height:40px; padding:0 18px; border-radius:999px; background:var(--lime); color:#050505;
+  font-weight:600; font-size:13px; display:inline-flex; align-items:center; gap:8px;
+  transition:transform var(--t-micro) var(--ease), box-shadow var(--t-micro)}
+.btn-ask:hover{transform:scale(1.04); box-shadow:0 0 30px rgba(199,255,61,.4)}
+.btn-ask .dot{width:7px; height:7px; border-radius:50%; background:#050505}
+.menu-toggle{display:none}
+@media(max-width:880px){
+  .nav{display:none}
+  .menu-toggle{display:flex; flex-direction:column; gap:5px; padding:8px}
+  .menu-toggle span{width:22px; height:1.5px; background:var(--text)}
+}
+
+/* progress rail */
+.rail{position:fixed; left:18px; top:50%; transform:translateY(-50%); z-index:70;
+  display:flex; flex-direction:column; gap:13px; align-items:center}
+.rail button{width:9px; height:9px; border-radius:50%; border:1px solid var(--dim);
+  transition:all var(--t-micro) var(--ease); position:relative}
+.rail button.on{background:var(--lime); border-color:var(--lime); box-shadow:0 0 12px rgba(199,255,61,.6)}
+.rail button .tip{position:absolute; left:18px; top:50%; transform:translateY(-50%);
+  font-family:var(--font-mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); white-space:nowrap; opacity:0; pointer-events:none; transition:opacity var(--t-micro)}
+.rail button:hover .tip{opacity:1}
+@media(max-width:880px){.rail{display:none}}
+
+/* ============================================================ LAYOUT */
+main{position:relative; z-index:2}
+section{position:relative}
+.wrap{max-width:1280px; margin:0 auto; padding:0 clamp(20px,5vw,40px)}
+.eyebrow{font-family:var(--font-mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--accent); display:flex; align-items:center; gap:10px; margin-bottom:22px}
+.eyebrow::before{content:''; width:28px; height:1px; background:var(--accent)}
+.sec-title{font-family:var(--font-display); font-weight:600; line-height:1.02; letter-spacing:-.02em;
+  font-size:clamp(36px,6vw,80px)}
+.sec-sub{color:var(--muted); font-size:clamp(15px,1.5vw,18px); max-width:560px; margin-top:18px}
+
+/* ============================================================ HERO */
+#hero{min-height:100svh; display:flex; align-items:center; position:relative; overflow:hidden}
+.hero-grid{display:grid; grid-template-columns:1.15fr .85fr; gap:40px; align-items:center; width:100%}
+.hero-kicker{font-family:var(--font-mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+  color:var(--dim); margin-bottom:26px; overflow:hidden}
+.hero-h{font-family:var(--font-display); font-weight:700; font-size:clamp(48px,8.5vw,116px);
+  line-height:.96; letter-spacing:-.035em}
+.hero-h .word{display:inline-block; overflow:hidden; vertical-align:top}
+.hero-h .word i{display:inline-block; font-style:normal; transform:translateY(110%)}
+.hero-h .lime{color:var(--lime)}
+.hero-sub{color:var(--muted); font-size:clamp(15px,1.5vw,19px); max-width:540px; margin-top:30px}
+.hero-micro{font-family:var(--font-mono); font-size:12px; color:var(--dim); margin-top:14px; letter-spacing:.02em}
+.hero-proof{display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; max-width:680px}
+.hero-proof span{font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); border:1px solid var(--border); background:rgba(255,255,255,.035);
+  border-radius:999px; padding:8px 12px}
+.hero-proof span b{color:var(--lime); font-weight:500}
+.hero-cta{display:flex; flex-wrap:wrap; gap:14px; margin-top:38px}
+.btn{height:52px; padding:0 24px; border-radius:999px; font-weight:500; font-size:15px;
+  display:inline-flex; align-items:center; gap:10px; transition:all var(--t-micro) var(--ease)}
+.btn-primary{background:var(--text); color:#050505}
+.btn-primary:hover{background:var(--lime); transform:scale(1.03)}
+.btn-secondary{border:1px solid var(--glass-border); color:var(--text)}
+.btn-secondary:hover{border-color:var(--text); background:rgba(255,255,255,.06)}
+.btn-ghost{color:var(--muted)} .btn-ghost:hover{color:var(--text)}
+.hero-orb{position:relative; height:560px; display:flex; align-items:center; justify-content:center}
+#orb-canvas{width:100%; height:100%}
+.orb-status{position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--dim); display:flex; align-items:center; gap:8px}
+.orb-status .pulse{width:6px; height:6px; border-radius:50%; background:var(--lime);
+  animation:opc 2.4s ease infinite}
+@keyframes opc{0%,100%{opacity:.3}50%{opacity:1}}
+@media(max-width:980px){
+  .hero-grid{grid-template-columns:1fr; gap:0}
+  .hero-orb{height:340px; order:-1; margin-top:60px}
+}
+
+/* ============================================================ MODES */
+#modes{padding:120px 0}
+.mode-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:54px}
+.mode-card{background:var(--glass); border:1px solid var(--glass-border); border-radius:28px;
+  padding:26px 24px 22px; min-height:230px; display:flex; flex-direction:column; justify-content:space-between;
+  position:relative; transition:transform var(--t-panel) var(--ease), border-color var(--t-panel);
+  transform-style:preserve-3d; overflow:hidden}
+.mode-card .glow{position:absolute; width:240px; height:240px; border-radius:50%;
+  background:radial-gradient(circle,rgba(199,255,61,.18),transparent 70%); pointer-events:none;
+  opacity:0; transition:opacity var(--t-panel); top:-80px; left:-80px}
+.mode-card:hover .glow{opacity:1}
+.mode-card:hover{border-color:rgba(199,255,61,.4)}
+.mode-ico{font-family:var(--font-mono); font-size:11px; color:var(--accent); position:absolute; top:24px; right:24px; letter-spacing:.1em}
+.mode-card h3{font-family:var(--font-display); font-size:26px; font-weight:600; margin-bottom:12px}
+.mode-card p{color:var(--muted); font-size:14px; line-height:1.55}
+.mode-enter{margin-top:20px; font-family:var(--font-mono); font-size:10px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--dim); display:inline-flex; align-items:center; gap:8px; align-self:flex-start;
+  padding:8px 14px; border:1px solid var(--border); border-radius:999px; transition:all var(--t-micro)}
+.mode-card:hover .mode-enter{color:var(--text); border-color:var(--text)}
+@media(max-width:880px){.mode-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.mode-grid{grid-template-columns:1fr}}
+
+/* ============================================================ EVIDENCE WALL */
+#evidence{padding:60px 0 120px; overflow:hidden}
+.ev-track{display:flex; gap:22px; padding:0 clamp(20px,5vw,40px); will-change:transform}
+.ev-card{flex:0 0 380px; background:var(--soft-black); border:1px solid var(--border); border-radius:24px;
+  overflow:hidden; transition:transform var(--t-panel) var(--ease), border-color var(--t-panel)}
+.ev-card:hover{transform:translateY(-6px); border-color:rgba(199,255,61,.4)}
+.ev-visual{height:200px; position:relative; overflow:hidden;
+  display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#0d0d0d,#161616)}
+.ev-visual .mock{position:absolute; inset:0; opacity:.9}
+.ev-tag{position:absolute; top:14px; left:14px; font-family:var(--font-mono); font-size:9px;
+  letter-spacing:.14em; text-transform:uppercase; padding:6px 10px; border-radius:999px;
+  background:rgba(0,0,0,.5); backdrop-filter:blur(8px); border:1px solid var(--hair); color:var(--accent)}
+.ev-body{padding:20px 22px 22px}
+.ev-body .meta{font-family:var(--font-mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin-bottom:10px}
+.ev-body h3{font-family:var(--font-display); font-size:21px; font-weight:600; margin-bottom:8px}
+.ev-body p{color:var(--muted); font-size:13.5px; line-height:1.55; margin-bottom:16px}
+.ev-actions{display:flex; gap:10px}
+.chip{font-family:var(--font-mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+  padding:8px 13px; border-radius:999px; border:1px solid var(--border); color:var(--muted);
+  transition:all var(--t-micro)}
+.chip:hover{border-color:var(--lime); color:var(--lime)}
+.chip.solid{background:var(--lime); color:#050505; border-color:var(--lime)}
+.chip.solid:hover{box-shadow:0 0 20px rgba(199,255,61,.35)}
+
+/* ============================================================ CASE STUDIES */
+#cases{padding:120px 0}
+.case-list{margin-top:56px; border-top:1px solid var(--border)}
+.case-row{display:grid; grid-template-columns:60px 1.4fr 1fr auto; gap:30px; align-items:center;
+  padding:34px 8px; border-bottom:1px solid var(--border); position:relative; transition:background var(--t-panel)}
+.case-row:hover{background:rgba(255,255,255,.02)}
+.case-row .num{font-family:var(--font-mono); font-size:13px; color:var(--accent)}
+.case-row h3{font-family:var(--font-display); font-size:clamp(24px,3vw,38px); font-weight:600; letter-spacing:-.02em}
+.case-row .desc{color:var(--muted); font-size:14px; line-height:1.55}
+.case-row .stack{font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-top:10px}
+.case-row .arrow{font-size:22px; color:var(--dim); transition:transform var(--t-micro) var(--ease), color var(--t-micro)}
+.case-row:hover .arrow{transform:translateX(6px); color:var(--lime)}
+@media(max-width:880px){.case-row{grid-template-columns:40px 1fr; gap:14px}
+  .case-row .desc-col,.case-row .arrow{display:none}}
+
+/* ============================================================ DNA / generic card grids */
+.split{padding:120px 0}
+.dna-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:54px}
+.dna-card{background:var(--glass); border:1px solid var(--glass-border); border-radius:22px; padding:24px;
+  transition:transform var(--t-panel) var(--ease), border-color var(--t-panel)}
+.dna-card:hover{transform:translateY(-6px); border-color:rgba(199,255,61,.4)}
+.dna-card .t{font-family:var(--font-display); font-size:20px; font-weight:600; margin-bottom:10px}
+.dna-card .p{color:var(--muted); font-size:13px; line-height:1.55}
+.dna-card .rel{font-family:var(--font-mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-top:14px}
+@media(max-width:880px){.dna-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.dna-grid{grid-template-columns:1fr}}
+
+/* ============================================================ STORY TIMELINE */
+#story{padding:120px 0}
+.timeline{margin-top:56px; position:relative}
+.timeline::before{content:''; position:absolute; left:11px; top:6px; bottom:6px; width:1px; background:var(--border)}
+.tl-item{position:relative; padding:0 0 40px 50px}
+.tl-item::before{content:''; position:absolute; left:5px; top:5px; width:13px; height:13px; border-radius:50%;
+  background:var(--soft-black); border:2px solid var(--dim); transition:all var(--t-micro)}
+.tl-item.lit::before{border-color:var(--lime); box-shadow:0 0 14px rgba(199,255,61,.6)}
+.tl-item .ch{font-family:var(--font-mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin-bottom:8px}
+.tl-item h4{font-family:var(--font-display); font-size:clamp(20px,2.4vw,28px); font-weight:600; margin-bottom:8px}
+.tl-item p{color:var(--muted); font-size:14.5px; line-height:1.6; max-width:560px}
+
+/* beliefs */
+.beliefs{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:40px}
+.belief{background:var(--soft-black); border:1px solid var(--border); border-radius:18px; padding:22px;
+  font-family:var(--font-display); font-size:17px; font-weight:500; line-height:1.35;
+  transition:border-color var(--t-micro), transform var(--t-micro) var(--ease); position:relative}
+.belief:hover{border-color:rgba(199,255,61,.4); transform:translateY(-4px)}
+.belief .why{color:var(--muted); font-family:var(--font-body); font-size:13px; font-weight:400; margin-top:12px;
+  max-height:0; overflow:hidden; opacity:0; transition:all var(--t-panel) var(--ease)}
+.belief:hover .why{max-height:120px; opacity:1; margin-top:12px}
+@media(max-width:880px){.beliefs{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.beliefs{grid-template-columns:1fr}}
+
+/* ============================================================ AI WORKFLOW */
+.flow-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:54px}
+.flow-card{border:1px solid var(--border); border-radius:20px; padding:24px; background:var(--soft-black);
+  transition:border-color var(--t-micro)}
+.flow-card:hover{border-color:rgba(143,216,255,.4)}
+.flow-card .n{font-family:var(--font-mono); font-size:11px; color:var(--blue); margin-bottom:14px}
+.flow-card h4{font-family:var(--font-display); font-size:18px; font-weight:600; margin-bottom:8px}
+.flow-card p{color:var(--muted); font-size:13px; line-height:1.5}
+.flow-quote{font-family:var(--font-display); font-size:clamp(22px,3vw,34px); font-weight:500; line-height:1.25;
+  letter-spacing:-.02em; margin-top:56px; max-width:880px}
+.flow-quote b{color:var(--lime); font-weight:500}
+@media(max-width:880px){.flow-grid{grid-template-columns:1fr}}
+
+/* ============================================================ NOW */
+#now{padding:120px 0}
+.now-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:54px}
+.now-card{border:1px solid var(--border); border-radius:20px; padding:26px; background:var(--soft-black)}
+.now-card .l{font-family:var(--font-mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); margin-bottom:16px; display:flex; align-items:center; gap:8px}
+.now-card .l .live{width:7px; height:7px; border-radius:50%; background:var(--lime); animation:opc 2s infinite}
+.now-card ul{list-style:none} .now-card li{font-size:15px; padding:7px 0; border-bottom:1px solid var(--hair); color:var(--text)}
+.now-card li:last-child{border-bottom:none}
+.now-updated{font-family:var(--font-mono); font-size:10px; color:var(--dim); margin-top:24px; letter-spacing:.1em}
+@media(max-width:880px){.now-grid{grid-template-columns:1fr}}
+
+/* ============================================================ CONTACT */
+#contact{padding:120px 0 160px}
+.contact-h{font-family:var(--font-display); font-size:clamp(40px,7vw,96px); font-weight:700; line-height:.98; letter-spacing:-.03em; max-width:900px}
+.contact-h .lime{color:var(--lime)}
+.contact-routes{display:flex; flex-wrap:wrap; gap:12px; margin-top:48px}
+.route{padding:14px 24px; border:1px solid var(--border); border-radius:999px; font-size:15px;
+  transition:all var(--t-micro) var(--ease); display:inline-flex; align-items:center; gap:10px}
+.route:hover{border-color:var(--lime); color:var(--lime); transform:translateY(-3px)}
+.route.solid{background:var(--lime); color:#050505; border-color:var(--lime)}
+.route.solid:hover{color:#050505; box-shadow:0 0 30px rgba(199,255,61,.4)}
+footer{border-top:1px solid var(--border); padding:36px 0; margin-top:60px}
+.foot-row{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px}
+.foot-row .c{font-family:var(--font-mono); font-size:11px; color:var(--dim); letter-spacing:.06em}
+.foot-row .links{display:flex; gap:20px} .foot-row .links a{font-size:13px; color:var(--muted)} .foot-row .links a:hover{color:var(--lime)}
+
+/* ============================================================ DOCK */
+.dock{position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:85;
+  height:60px; padding:8px; display:flex; align-items:center; gap:4px;
+  background:rgba(255,255,255,.06); backdrop-filter:blur(24px); border:1px solid var(--glass-border);
+  border-radius:999px; box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.dock a,.dock button{height:44px; padding:0 16px; border-radius:999px; font-size:13px; color:var(--muted);
+  display:flex; align-items:center; gap:7px; transition:all var(--t-micro)}
+.dock a:hover{color:var(--text); background:rgba(255,255,255,.06)}
+.dock .ask-dock{background:var(--lime); color:#050505; font-weight:600; padding:0 20px}
+.dock .ask-dock:hover{box-shadow:0 0 24px rgba(199,255,61,.45)}
+.dock .lbl{display:inline}
+@media(max-width:600px){.dock{width:calc(100% - 24px); justify-content:space-around; gap:0}
+  .dock .lbl{display:none} .dock a,.dock button{padding:0 12px}}
+
+/* voice orb */
+.voice-orb{position:fixed; bottom:24px; right:24px; z-index:85; width:56px; height:56px; border-radius:50%;
+  background:var(--soft-black); border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center;
+  transition:all var(--t-micro) var(--ease)}
+.voice-orb:hover{border-color:var(--lime); transform:scale(1.06)}
+.voice-orb.speaking{border-color:var(--lime); box-shadow:0 0 30px rgba(199,255,61,.5)}
+.voice-orb svg{width:22px; height:22px; stroke:var(--text); fill:none; stroke-width:1.6}
+.voice-orb.speaking svg{stroke:var(--lime)}
+@media(max-width:600px){.voice-orb{bottom:92px}}
+
+/* ============================================================ ASK OVERLAY (conversation) */
+.ask-overlay{position:fixed; inset:0; z-index:200; background:rgba(5,5,5,.86); backdrop-filter:blur(16px);
+  display:flex; align-items:flex-end; justify-content:center; opacity:0; pointer-events:none; transition:opacity var(--t-panel)}
+.ask-overlay.open{opacity:1; pointer-events:auto}
+.ask-panel{width:min(820px,94vw); max-height:88svh; background:var(--soft-black); border:1px solid var(--border);
+  border-radius:30px 30px 0 0; display:flex; flex-direction:column; transform:translateY(40px); transition:transform var(--t-panel) var(--ease); overflow:hidden}
+.ask-overlay.open .ask-panel{transform:translateY(0)}
+.ask-head{display:flex; align-items:center; justify-content:space-between; padding:20px 24px; border-bottom:1px solid var(--border)}
+.ask-head .id{display:flex; align-items:center; gap:12px}
+.ask-head .od{width:30px; height:30px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #1a1a1a, #050505);
+  border:1px solid var(--glass-border); position:relative; flex:0 0 auto}
+.ask-head .od::after{content:''; position:absolute; inset:6px; border-radius:50%; background:radial-gradient(circle,var(--lime),transparent 70%); opacity:.5}
+.ask-head .id .nm{font-family:var(--font-display); font-weight:600; font-size:15px}
+.ask-head .id .st{font-family:var(--font-mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--lime)}
+.ask-close{font-family:var(--font-mono); font-size:11px; letter-spacing:.1em; color:var(--muted); padding:8px 12px; border:1px solid var(--border); border-radius:999px}
+.ask-close:hover{color:var(--text); border-color:var(--text)}
+.ask-msgs{flex:1; overflow-y:auto; padding:24px; display:flex; flex-direction:column; gap:18px; min-height:240px}
+.ask-msgs::-webkit-scrollbar{width:8px} .ask-msgs::-webkit-scrollbar-thumb{background:var(--border); border-radius:4px}
+.msg{max-width:84%; font-size:15px; line-height:1.6}
+.msg.user{align-self:flex-end; background:rgba(255,255,255,.07); padding:12px 18px; border-radius:18px 18px 4px 18px}
+.msg.bot{align-self:flex-start; color:var(--text)}
+.msg.bot .who{font-family:var(--font-mono); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); margin-bottom:6px}
+.msg.bot .speak{font-family:var(--font-mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--lime);
+  margin-top:8px; display:inline-flex; align-items:center; gap:6px; opacity:.8}
+.msg.bot .speak:hover{opacity:1}
+.card-inline{margin-top:14px; border:1px solid var(--border); border-radius:16px; padding:16px; background:rgba(255,255,255,.02); max-width:420px}
+.card-inline .ct{font-family:var(--font-mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-bottom:6px}
+.card-inline h5{font-family:var(--font-display); font-size:17px; margin-bottom:6px}
+.card-inline p{color:var(--muted); font-size:13px; line-height:1.5}
+.followups{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
+.ask-input-row{padding:18px 24px 24px; border-top:1px solid var(--border)}
+.ask-input{display:flex; align-items:center; gap:12px; height:60px; padding:0 8px 0 22px; border-radius:999px;
+  background:rgba(255,255,255,.06); border:1px solid var(--glass-border)}
+.ask-input input{flex:1; background:none; border:none; outline:none; color:var(--text); font-size:15px; font-family:var(--font-body)}
+.ask-input input::placeholder{color:var(--dim)}
+.ask-send{width:44px; height:44px; border-radius:50%; background:var(--lime); color:#050505; display:flex; align-items:center; justify-content:center; transition:transform var(--t-micro)}
+.ask-send:hover{transform:scale(1.08)}
+.prompt-chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
+
+/* ============================================================ COMMAND PALETTE */
+.cmdk{position:fixed; inset:0; z-index:300; display:flex; align-items:flex-start; justify-content:center;
+  padding-top:14vh; background:rgba(0,0,0,.6); backdrop-filter:blur(8px); opacity:0; pointer-events:none; transition:opacity var(--t-micro)}
+.cmdk.open{opacity:1; pointer-events:auto}
+.cmdk-box{width:min(720px,92vw); max-height:70svh; background:var(--soft-black); border:1px solid var(--border);
+  border-radius:28px; box-shadow:0 40px 120px rgba(0,0,0,.6); overflow:hidden; transform:scale(.97); transition:transform var(--t-micro) var(--ease)}
+.cmdk.open .cmdk-box{transform:scale(1)}
+.cmdk-input{display:flex; align-items:center; gap:14px; padding:20px 24px; border-bottom:1px solid var(--border)}
+.cmdk-input span{font-family:var(--font-mono); font-size:13px; color:var(--lime)}
+.cmdk-input input{flex:1; background:none; border:none; outline:none; color:var(--text); font-size:16px; font-family:var(--font-body)}
+.cmdk-input input::placeholder{color:var(--dim)}
+.cmdk-results{overflow-y:auto; max-height:52svh; padding:8px}
+.cmdk-group{font-family:var(--font-mono); font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:var(--dim); padding:14px 16px 6px}
+.cmdk-item{display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:14px; font-size:14.5px; color:var(--muted); cursor:none}
+body.touch .cmdk-item{cursor:pointer}
+.cmdk-item .k{margin-left:auto; font-family:var(--font-mono); font-size:10px; color:var(--dim); border:1px solid var(--border); padding:3px 7px; border-radius:6px}
+.cmdk-item.sel,.cmdk-item:hover{background:rgba(199,255,61,.1); color:var(--text)}
+.cmdk-item .ico{font-family:var(--font-mono); font-size:12px; color:var(--accent); width:18px}
+
+/* mode banner */
+.mode-banner{position:fixed; top:80px; left:50%; transform:translateX(-50%) translateY(-20px); z-index:88;
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+  padding:9px 18px; border-radius:999px; background:rgba(5,5,5,.8); backdrop-filter:blur(10px);
+  border:1px solid var(--accent); color:var(--accent); opacity:0; pointer-events:none; transition:all var(--t-panel) var(--ease)}
+.mode-banner.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+/* reveal animation base */
+.reveal{opacity:0; transform:translateY(30px)}
+body.reduced .reveal{opacity:1; transform:none}
+
+/* helper */
+.spacer{height:40px}
+/* ============================================================ INTERACTIVE LAYER (v2) */
+html.lenis,html.lenis body{height:auto}
+.lenis.lenis-smooth{scroll-behavior:auto!important}
+.lenis.lenis-stopped{overflow:clip}
+
+/* scroll progress bar */
+.scroll-progress{position:fixed; top:0; left:0; height:2px; width:100%; z-index:95;
+  transform:scaleX(0); transform-origin:0 50%; background:linear-gradient(90deg,var(--lime),var(--blue)); box-shadow:0 0 14px rgba(199,255,61,.5)}
+
+/* line-mask reveal for big titles */
+.line-mask{display:block; overflow:hidden; padding-bottom:.02em}
+.line-inner{display:block; transform:translateY(110%); will-change:transform}
+body.reduced .line-inner{transform:none}
+
+/* 3D tilt cards */
+.tilt{transform-style:preserve-3d; will-change:transform}
+.tilt-glare{position:absolute; inset:0; border-radius:inherit; pointer-events:none; opacity:0;
+  background:radial-gradient(circle at var(--gx,50%) var(--gy,50%), rgba(199,255,61,.16), transparent 55%); transition:opacity var(--t-micro)}
+.tilt:hover .tilt-glare{opacity:1}
+
+/* magnetic targets keep layout */
+.magnetic{will-change:transform}
+
+/* parallax depth helpers */
+[data-depth]{will-change:transform}
+.bg-grid,.bg-glow{will-change:transform}
+
+/* ============================================================ KINETIC MARQUEE */
+.marquee{padding:64px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+  overflow:hidden; position:relative; background:linear-gradient(180deg,transparent,rgba(199,255,61,.02),transparent)}
+.marquee-track{display:flex; white-space:nowrap; will-change:transform; gap:0}
+.marquee-track .item{font-family:var(--font-display); font-weight:600; font-size:clamp(38px,7vw,90px);
+  letter-spacing:-.02em; padding:0 .35em; line-height:1; color:transparent;
+  -webkit-text-stroke:1px var(--dim); transition:color var(--t-micro),-webkit-text-stroke var(--t-micro)}
+.marquee-track .item:hover{color:var(--lime); -webkit-text-stroke:1px var(--lime)}
+.marquee-track .item .star{color:var(--lime); -webkit-text-stroke:0; padding:0 .25em; font-size:.5em; vertical-align:middle}
+.marquee-fade{position:absolute; top:0; bottom:0; width:14%; z-index:2; pointer-events:none}
+.marquee-fade.l{left:0; background:linear-gradient(90deg,var(--black),transparent)}
+.marquee-fade.r{right:0; background:linear-gradient(270deg,var(--black),transparent)}
+
+/* velocity skew wrapper */
+.skewer{will-change:transform}
+
+
+/* ============================================================
+   V3 STRUCTURE + RESPONSIVE + PERFORMANCE PATCH
+   ============================================================ */
+body{cursor:auto;}
+button,a,.cmdk-item{cursor:pointer;}
+.cursor-dot,.cursor-ring,.cursor-label{display:none!important;}
+
+header.topbar-clean{
+  top:24px; left:clamp(16px,3vw,42px); right:clamp(16px,3vw,42px);
+  height:64px; padding:0 18px 0 22px; border:1px solid rgba(255,255,255,.09);
+  border-radius:24px; background:rgba(5,5,5,.46); backdrop-filter:blur(18px);
+  box-shadow:0 16px 60px rgba(0,0,0,.32);
+}
+header.topbar-clean.scrolled{background:rgba(5,5,5,.76); border-color:rgba(255,255,255,.12)}
+.brand{min-width:0;}
+.brand .name{font-size:17px; letter-spacing:.01em}
+.brand .sub{letter-spacing:.14em; opacity:.82}
+.top-status{display:flex; align-items:center; gap:12px; color:var(--muted); font-size:12px; margin-left:auto; margin-right:16px;}
+.status-pill{display:inline-flex; align-items:center; gap:8px; height:34px; padding:0 12px; border:1px solid rgba(255,255,255,.08); border-radius:999px; background:rgba(255,255,255,.035);}
+.status-pill i{width:7px;height:7px;border-radius:50%;background:var(--lime);box-shadow:0 0 12px rgba(199,255,61,.6);}
+.top-connect{height:42px; padding:0 16px; white-space:nowrap;}
+.nav,.menu-toggle{display:none!important;}
+
+#hero{min-height:100svh; padding-top:96px; padding-bottom:96px;}
+.hero-grid{grid-template-columns:minmax(0,1.04fr) minmax(360px,.96fr); gap:clamp(24px,4vw,72px);}
+.hero-left{position:relative; z-index:3; padding-top:18px;}
+.hero-kicker{font-size:10px; letter-spacing:.18em; margin-bottom:20px; color:rgba(245,245,245,.52);}
+.hero-h{font-size:clamp(58px,8.2vw,122px); line-height:.94; max-width:760px;}
+.hero-sub{max-width:650px; margin-top:24px; font-size:clamp(16px,1.35vw,19px); color:rgba(245,245,245,.72);}
+.hero-micro{margin-top:12px;}
+.hero-proof{margin-top:24px; gap:9px;}
+.hero-proof span{background:rgba(255,255,255,.045); border-color:rgba(255,255,255,.11); padding:9px 13px;}
+.hero-cta{margin-top:34px;}
+.hero-orb{height:min(56vw,580px); min-height:420px; opacity:.94;}
+.orb-status{bottom:6px;}
+
+.dock{
+  height:70px; padding:9px; bottom:24px; gap:8px;
+  background:rgba(10,10,10,.74); border-color:rgba(255,255,255,.14);
+  box-shadow:0 22px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.dock a,.dock button{height:52px; min-width:92px; justify-content:center; padding:0 18px;}
+.dock .ask-dock{min-width:112px; font-size:14px; box-shadow:0 0 0 1px rgba(199,255,61,.24), 0 8px 34px rgba(199,255,61,.18);}
+.dock a:hover{background:rgba(255,255,255,.08);}
+
+.wrap{max-width:1360px;}
+section{scroll-margin-top:110px;}
+.mode-card,.ev-card,.dna-card,.flow-card,.now-card,.belief,.case-row{will-change:auto;}
+.bg-grid{opacity:.78;}
+.bg-glow{filter:blur(60px); opacity:.85;}
+
+@media(max-width:1180px){
+  .hero-grid{grid-template-columns:1fr .78fr; gap:28px;}
+  .hero-h{font-size:clamp(54px,8vw,96px);}
+  .hero-orb{min-height:360px;}
+}
+@media(max-width:980px){
+  header.topbar-clean{top:14px; height:58px; border-radius:20px;}
+  .top-status{display:none;}
+  #hero{padding-top:88px; padding-bottom:84px;}
+  .hero-grid{grid-template-columns:1fr; gap:24px;}
+  .hero-orb{order:0; height:320px; min-height:280px; margin-top:0;}
+  .hero-left{order:1; padding-top:0;}
+  .hero-h{font-size:clamp(48px,13vw,78px); max-width:680px;}
+  .hero-sub{font-size:16px; max-width:620px;}
+  .hero-cta{gap:10px;}
+  .dock{width:calc(100% - 28px); max-width:680px; height:66px; bottom:14px;}
+  .dock a,.dock button{min-width:auto; flex:1; padding:0 10px;}
+}
+@media(max-width:640px){
+  header.topbar-clean{left:12px;right:12px;top:10px;padding:0 12px 0 14px;height:56px;}
+  .brand .name{font-size:15px}.brand .sub{display:none}.top-connect{height:38px;padding:0 12px;font-size:12px;}
+  #hero{padding-top:80px; padding-bottom:96px; align-items:flex-start;}
+  .hero-kicker{font-size:9px; letter-spacing:.12em; margin-bottom:16px;}
+  .hero-h{font-size:clamp(43px,14.5vw,62px); line-height:.98;}
+  .hero-sub{margin-top:20px; font-size:15px; line-height:1.65;}
+  .hero-proof{gap:8px;}
+  .hero-proof span{font-size:9px; padding:7px 10px;}
+  .hero-cta .btn{width:100%; justify-content:center; height:50px;}
+  .hero-orb{height:260px; min-height:240px;}
+  .dock{height:62px; bottom:12px; padding:7px; border-radius:24px;}
+  .dock .lbl{display:none;}
+  .dock .ask-dock{flex:1.35; min-width:88px;}
+  .voice-orb{display:none;}
+}
+@media(max-width:420px){
+  .hero-h{font-size:42px;}
+  .hero-orb{height:220px; min-height:210px;}
+  .top-connect{font-size:0; width:40px; padding:0; justify-content:center;}
+  .top-connect:after{content:'Ask'; font-size:12px;}
+}
+
+</style>
+</head>
+<body>
+
+<!-- ambient background -->
+<div class="bg-field" aria-hidden="true">
+  <div class="bg-grid"></div>
+  <div class="bg-glow" id="bgGlow"></div>
+  <div class="bg-noise"></div>
+</div>
+
+<!-- scroll progress -->
+<div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+
+<!-- cursor -->
+<div class="cursor-dot" id="cDot"></div>
+<div class="cursor-ring" id="cRing"></div>
+<div class="cursor-label" id="cLabel"></div>
+
+<!-- BOOT -->
+<div id="boot">
+  <div class="boot-log" id="bootLog"></div>
+  <button id="boot-skip" data-cursor="Skip">Skip intro →</button>
+</div>
+
+<!-- HEADER: minimal status bar, bottom dock is the primary navigation -->
+<header id="header" class="topbar-clean">
+  <a href="#hero" class="brand" data-cursor="Home">
+    <span class="name">PRIYANSHU <b>OS</b></span>
+    <span class="sub">personal portfolio</span>
+  </a>
+  <div class="top-status" aria-label="Portfolio status">
+    <span class="status-pill"><i></i> Interactive portfolio</span>
+    <span class="status-pill hide-sm"><i></i> Spark online</span>
+  </div>
+  <button class="btn-ask top-connect" data-ask data-cursor="Ask"><span class="dot"></span> Ask Spark</button>
+</header>
+
+<!-- mode banner -->
+<div class="mode-banner" id="modeBanner"></div>
+
+<!-- progress rail -->
+<div class="rail" id="rail" aria-hidden="true"></div>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section id="hero" data-rail="Home">
+    <div class="wrap hero-grid">
+      <div class="hero-left">
+        <div class="hero-kicker">PRIYANSHU AGARWAL — PERSONAL PORTFOLIO</div>
+        <h1 class="hero-h" id="heroH">
+          <span class="word"><i>I'm</i></span> <span class="word"><i>Priyanshu.</i></span><br>
+          <span class="word"><i>I</i></span> <span class="word"><i>do</i></span> <span class="word"><i class="lime">things.</i></span>
+        </h1>
+        <p class="hero-sub">This is my interactive portfolio — a living archive of the websites, apps, hackathon platforms, AI workflows, founder-office systems, and experiments I have built so far.</p>
+        <p class="hero-micro">Ask Spark about my work, projects, skills, story, mistakes, current builds, or what I can help build next.</p>
+        <div class="hero-proof" aria-label="Portfolio highlights">
+          <span><b>12+</b> builds</span>
+          <span>Student Social</span>
+          <span>Nirog Bhumi</span>
+          <span>Hackathon platforms</span>
+          <span>AI QA workflows</span>
+        </div>
+        <div class="hero-cta">
+          <button class="btn btn-primary" data-ask-q="Who is Priyanshu and what has he built?" data-cursor="Ask">Ask about Priyanshu</button>
+          <a href="#evidence" class="btn btn-secondary" data-cursor="View">See proof of work</a>
+          <button class="btn btn-ghost" data-mode="recruiter" data-cursor="Open">Open clean resume view →</button>
+        </div>
+      </div>
+      <div class="hero-orb">
+        <canvas id="orb-canvas"></canvas>
+        <div class="orb-status"><span class="pulse"></span><span id="orbStatus">SPARK · IDLE</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MODES ============ -->
+  <section id="modes" data-rail="Modes">
+    <div class="wrap">
+      <div class="eyebrow reveal">Choose your lens</div>
+      <h2 class="sec-title reveal">Choose how you<br>want to know me.</h2>
+      <div class="mode-grid">
+        <div class="mode-card reveal" data-mode="founder" data-cursor="Enter"><div class="glow"></div>
+          <span class="mode-ico">[F]</span>
+          <div><h3>Founder Mode</h3><p>For people who want execution, ownership, and speed.</p></div>
+          <span class="mode-enter">Enter mode →</span>
+        </div>
+        <div class="mode-card reveal" data-mode="recruiter" data-cursor="Enter"><div class="glow"></div>
+          <span class="mode-ico">[R]</span>
+          <div><h3>Recruiter Mode</h3><p>The clean version: skills, resume, projects, experience.</p></div>
+          <span class="mode-enter">Enter mode →</span>
+        </div>
+        <div class="mode-card reveal" data-mode="builder" data-cursor="Enter"><div class="glow"></div>
+          <span class="mode-ico">[B]</span>
+          <div><h3>Builder Mode</h3><p>For people who care about what I built and how I built it.</p></div>
+          <span class="mode-enter">Enter mode →</span>
+        </div>
+        <div class="mode-card reveal" data-mode="story" data-cursor="Enter"><div class="glow"></div>
+          <span class="mode-ico">[S]</span>
+          <div><h3>Story Mode</h3><p>The unusual route, not just the polished result.</p></div>
+          <span class="mode-enter">Enter mode →</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EVIDENCE WALL ============ -->
+  <section id="evidence" data-rail="Work">
+    <div class="wrap">
+      <div class="eyebrow reveal">Not claims. Proof.</div>
+      <h2 class="sec-title reveal">The Evidence Wall</h2>
+      <p class="sec-sub reveal">Projects, platforms, websites, experiments, and systems I shipped — often before I fully knew how. Drag or scroll across.</p>
+    </div>
+    <div class="spacer"></div>
+    <div class="ev-track" id="evTrack"><!-- injected --></div>
+  </section>
+
+  <!-- ============ CASE STUDIES ============ -->
+  <section id="cases" data-rail="Cases">
+    <div class="wrap">
+      <div class="eyebrow reveal">Deep dives</div>
+      <h2 class="sec-title reveal">From "I built stuff"<br>to "I understand problems."</h2>
+      <div class="case-list" id="caseList"><!-- injected --></div>
+    </div>
+  </section>
+
+  <!-- ============ BUILDER DNA ============ -->
+  <section class="split" data-rail="DNA">
+    <div class="wrap">
+      <div class="eyebrow reveal">Operating traits</div>
+      <h2 class="sec-title reveal">Builder DNA</h2>
+      <p class="sec-sub reveal">The way I work is simple: move fast, learn faster, and make the thing real.</p>
+      <div class="dna-grid" id="dnaGrid"><!-- injected --></div>
+    </div>
+  </section>
+
+  <!-- ============ KINETIC MARQUEE ============ -->
+  <section class="marquee" data-rail="Drift" aria-hidden="true">
+    <div class="marquee-fade l"></div><div class="marquee-fade r"></div>
+    <div class="marquee-track" id="marquee"></div>
+  </section>
+
+  <!-- ============ STORY ============ -->
+  <section id="story" data-rail="Story">
+    <div class="wrap">
+      <div class="eyebrow reveal">The unusual route</div>
+      <h2 class="sec-title reveal">I followed the path<br>where I could build the most.</h2>
+      <div class="timeline" id="timeline"><!-- injected --></div>
+      <div class="spacer"></div>
+      <div class="eyebrow reveal" style="margin-top:40px">Things I actually believe</div>
+      <div class="beliefs" id="beliefs"><!-- injected --></div>
+    </div>
+  </section>
+
+  <!-- ============ AI WORKFLOW ============ -->
+  <section class="split" data-rail="AI">
+    <div class="wrap">
+      <div class="eyebrow reveal" style="color:var(--blue)">AI-native workflow</div>
+      <h2 class="sec-title reveal">How I use AI without<br>outsourcing my brain.</h2>
+      <div class="flow-grid" id="flowGrid"><!-- injected --></div>
+      <p class="flow-quote reveal">AI is not the work. AI is the multiplier. The <b>taste, direction, and responsibility</b> still need to be mine.</p>
+    </div>
+  </section>
+
+  <!-- ============ LAB ============ -->
+  <section id="lab" class="split" data-rail="Lab">
+    <div class="wrap">
+      <div class="eyebrow reveal" style="color:var(--red)">The Lab</div>
+      <h2 class="sec-title reveal">Experiments, broken things,<br>and ideas that refused to stay in my notes.</h2>
+      <div class="dna-grid" id="labGrid"><!-- injected --></div>
+    </div>
+  </section>
+
+  <!-- ============ NOW ============ -->
+  <section id="now" data-rail="Now">
+    <div class="wrap">
+      <div class="eyebrow reveal">Live status</div>
+      <h2 class="sec-title reveal">Now</h2>
+      <p class="sec-sub reveal">What I'm building, learning, and obsessing over right now.</p>
+      <div class="now-grid" id="nowGrid"><!-- injected --></div>
+      <div class="now-updated" id="nowUpdated"></div>
+    </div>
+  </section>
+
+  <!-- ============ CONTACT ============ -->
+  <section id="contact" data-rail="Contact">
+    <div class="wrap">
+      <div class="eyebrow reveal">If this feels useful</div>
+      <h1 class="contact-h reveal">Let's build<br>something <span class="lime">useful.</span></h1>
+      <div class="contact-routes">
+        <button class="route solid" data-ask data-cursor="Send">Send a signal →</button>
+        <button class="route" data-ask-q="Is Priyanshu available for work?" data-cursor="Ask">Hire me</button>
+        <button class="route" data-ask-q="Explore collaboration ideas" data-cursor="Ask">Collaborate</button>
+        <button class="route" data-ask-q="Show me the resume" data-cursor="Ask">Download resume</button>
+        <a class="route" href="#hero" data-cursor="Top">Back to top ↑</a>
+      </div>
+      <footer>
+        <div class="wrap foot-row" style="padding:0">
+          <span class="c">PRIYANSHU OS · BUILT WITH PROOF, NOT PROMISES · 2026</span>
+          <div class="links">
+            <a href="#" data-cursor="Open">GitHub</a>
+            <a href="#" data-cursor="Open">LinkedIn</a>
+            <a href="#" data-cursor="Open">X / Twitter</a>
+            <a href="#" data-cursor="Open">Email</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </section>
+</main>
+
+<!-- DOCK -->
+<nav class="dock" id="dock">
+  <a href="#hero" data-cursor="Home">⌂<span class="lbl">Home</span></a>
+  <a href="#evidence" data-cursor="View">▦<span class="lbl">Work</span></a>
+  <button class="ask-dock" data-ask data-cursor="Ask">✦ Ask</button>
+  <a href="#story" data-cursor="View">◷<span class="lbl">Story</span></a>
+  <a href="#contact" data-cursor="View">✉<span class="lbl">Contact</span></a>
+</nav>
+
+<!-- VOICE ORB -->
+<button class="voice-orb" id="voiceOrb" data-cursor="Listen" title="Speak the last answer (browser voice)">
+  <svg viewBox="0 0 24 24"><path d="M12 3v18M8 7v10M16 7v10M4 10v4M20 10v4"/></svg>
+</button>
+
+<!-- ASK OVERLAY -->
+<div class="ask-overlay" id="askOverlay">
+  <div class="ask-panel">
+    <div class="ask-head">
+      <div class="id"><div class="od"></div><div><div class="nm">Priyanshu OS</div><div class="st" id="botState">SPARK · READY</div></div></div>
+      <button class="ask-close" id="askClose" data-cursor="Close">ESC ·  Close</button>
+    </div>
+    <div class="ask-msgs" id="askMsgs" data-lenis-prevent></div>
+    <div class="ask-input-row">
+      <div class="ask-input">
+        <input id="askInput" type="text" placeholder="Ask about Priyanshu, projects, skills, story, or current work…" autocomplete="off" />
+        <button class="ask-send" id="askSend" data-cursor="Send">→</button>
+      </div>
+      <div class="prompt-chips" id="promptChips"></div>
+    </div>
+  </div>
+</div>
+
+<!-- COMMAND PALETTE -->
+<div class="cmdk" id="cmdk">
+  <div class="cmdk-box">
+    <div class="cmdk-input"><span>⌘K</span><input id="cmdkInput" type="text" placeholder="Search or ask anything…" autocomplete="off" /></div>
+    <div class="cmdk-results" id="cmdkResults" data-lenis-prevent></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   PRIYANSHU OS — RUNTIME
+   ============================================================ */
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const isTouch = window.matchMedia('(pointer: coarse)').matches;
+if(reduced) document.body.classList.add('reduced');
+if(isTouch) document.body.classList.add('touch');
+gsap.registerPlugin(ScrollTrigger);
+
+/* ---------- CONTENT (from PRD §14, §16, §17, §19, §26) ---------- */
+const PROJECTS = [
+  {tag:'Product · In progress', meta:'2025 — present · Product + Builder', title:'Student Social / PeerSpark',
+   desc:'AI-powered social learning app: pods, realtime chat, AI mentors, tasks, sessions, resources, community workflows.',
+   q:'What is Student Social?', hue:'199,255,61'},
+  {tag:"Founder's Office · Live", meta:'Operator · Web + Commerce + Ops', title:'Nirog Bhumi',
+   desc:'Founder\'s office work: website systems, e-commerce consultation flow, Google Workspace architecture, content operations.',
+   q:'What did Priyanshu do at Nirog Bhumi?', hue:'201,164,76'},
+  {tag:'Community · Shipped', meta:'Event ops + Web', title:'Enigma\'26 + Hackathon Sites',
+   desc:'Hackathon websites, sponsorship systems, and on-the-ground event operations for student tech communities.',
+   q:'Show me the hackathon work', hue:'143,216,255'},
+  {tag:'AI Workflow · Working', meta:'QA · ChatGPT Agent Mode', title:'Deep QA Testing Loop',
+   desc:'I use ChatGPT Agent Mode to test full platforms, click flows, inspect bugs, and generate targeted fix prompts.',
+   q:'How does Priyanshu use AI?', hue:'199,255,61'},
+  {tag:'Community · Hosted', meta:'Jaipur · Organizer', title:'ChatGPT Roundtable Jaipur',
+   desc:'Community building around AI tooling — roundtables, the ChatGPT Lab, and student ecosystem work.',
+   q:'Tell me about the community work', hue:'143,216,255'},
+  {tag:'Client · Delivered', meta:'Agency · Web', title:'Agency & Client Websites',
+   desc:'PHP, HTML, WordPress, WooCommerce, and Next.js builds delivered for real clients with real deadlines.',
+   q:'Show me client work', hue:'199,255,61'},
+];
+const CASES = [
+  {n:'01', t:'Student Social / PeerSpark', d:'Students need a more structured, social way to learn together. I built auth, pods, chat, profiles, sessions, and the Appwrite layer.', s:'Next.js · Appwrite · Vercel · Tailwind · Realtime', q:'What is Student Social?'},
+  {n:'02', t:'Nirog Bhumi System', d:'Not just screens — the systems around the screens: website, commerce, consultation booking, Workspace and content ops.', s:'Web · Commerce · Ops · Content', q:'What did Priyanshu do at Nirog Bhumi?'},
+  {n:'03', t:'Hackathon Site + Event Ops', d:'A live event platform plus the operational machine behind it: sponsorships, logistics, and community coordination.', s:'Web · Event Ops · Design', q:'Show me the hackathon work'},
+  {n:'04', t:'AI QA Testing Workflow', d:'Turning ChatGPT into a QA tester that walks full flows, finds what broke, and writes the fix prompts back to me.', s:'AI · QA · Prompt systems', q:'How does Priyanshu use AI?'},
+];
+const DNA = [
+  {t:'Speed', p:'AI workflows, QA loops, and fast iteration to move from idea to working system quickly.', r:'Student Social · Nirog Bhumi'},
+  {t:'Taste', p:'Built by looking at great work and refusing to ship the templated, default version.', r:'This portfolio'},
+  {t:'AI Leverage', p:'AI as a building partner and multiplier — never a replacement for thinking.', r:'QA loop · Codex prompts'},
+  {t:'Systems thinking', p:'I build the operations around the product, not just the interface on top.', r:"Founder's Office"},
+  {t:'Community', p:'Roundtables, hackathons, and student ecosystems — execution with people, not just for them.', r:'Enigma\'26 · ChatGPT Lab'},
+  {t:'Product instinct', p:'Flows, users, and edge cases come before pixels. The thing has to actually work.', r:'PeerSpark'},
+  {t:'Ownership', p:'I take vague ideas into chaos and come out the other side with shipped systems.', r:'Nirog Bhumi'},
+  {t:'Learning by shipping', p:'A messy shipped thing teaches more than a perfect idea sitting in notes.', r:'The Lab'},
+];
+const TIMELINE = [
+  {ch:'Chapter 1 · Curiosity', h:'Exploring the edges', p:'Started by exploring the internet, tools, websites, design, and communities — following curiosity wherever it led.'},
+  {ch:'Chapter 2 · Building', h:'Hands on the keyboard', p:'Built websites, apps, hackathon platforms, agency work, and experiments. Learning meant making.'},
+  {ch:'Chapter 3 · AI-Native Shift', h:'AI as a building partner', p:'Started using AI not just for answers, but as a QA tester, prompt engineer, product reviewer, and execution multiplier.'},
+  {ch:'Chapter 4 · Community', h:'Building with people', p:'Got involved in communities, hackathons, the ChatGPT Lab, roundtables, and the student ecosystem.'},
+  {ch:'Chapter 5 · The Non-Linear Path', h:'Choosing the build', p:'Left the conventional college route and chose work, shipping, and real-world responsibility instead.'},
+  {ch:"Chapter 6 · Founder's Office", h:'Operating, not just coding', p:'Joined Nirog Bhumi and started working across operations, technology, websites, content systems, and business execution.'},
+  {ch:'Chapter 7 · Now', h:'Systems that speak for themselves', p:'Currently building systems, apps, websites, workflows, and a portfolio that proves the work instead of describing it.'},
+];
+const BELIEFS = [
+  {t:'Proof of work beats permission.', w:'You don\'t need someone to allow you to build. The work is the permission slip.'},
+  {t:'Speed is a skill.', w:'Moving fast is a muscle — built through reps, tooling, and refusing to overthink.'},
+  {t:'AI is leverage, not a replacement for thinking.', w:'The taste, direction, and responsibility still have to be mine.'},
+  {t:'A messy shipped thing teaches more than a perfect idea.', w:'Reality is the best teacher, and it only shows up after you ship.'},
+  {t:'Good taste is built by looking at great work.', w:'Study the best, internalize it, then make something that\'s yours.'},
+  {t:'If I don\'t know something, I\'ll build my way into knowing it.', w:'The fastest way to learn a thing is to be responsible for making it work.'},
+];
+const FLOW = [
+  {n:'01', h:'AI for building', p:'Scaffolding, refactors, and rebuilding broken flows around real user behaviour.'},
+  {n:'02', h:'AI for QA', p:'Agent-mode testing that walks every click, finds bugs, and reports back.'},
+  {n:'03', h:'AI for prompts', p:'Prompt systems and Codex flows that turn a vague fix into a precise instruction.'},
+  {n:'04', h:'AI for product thinking', p:'Pressure-testing flows, naming, and edge cases before a line of code.'},
+  {n:'05', h:'AI for design iteration', p:'Fast exploration of directions, then choosing with taste — not vibes.'},
+  {n:'06', h:'AI for documentation', p:'Turning chaos into docs, processes, and systems other people can use.'},
+];
+const LAB = [
+  {t:'Deep QA with Agent Mode', p:'ChatGPT testing full platforms, clicking flows, and generating fix prompts. Status: working.', r:'AI Workflow'},
+  {t:'Conversational portfolio', p:'A website you talk to instead of scroll. You\'re inside the experiment right now.', r:'Prototype'},
+  {t:'Appwrite permission cleanup', p:'A failed-then-fixed loop on realtime chat permissions. Status: lessons learned.', r:'Failed → Fixed'},
+  {t:'Codex prompt systems', p:'Reusable prompts that rebuild project sections from a spec. Status: in use.', r:'AI Workflow'},
+  {t:'Voice-based interfaces', p:'Exploring sites that answer out loud — without depending on paid voice credits.', r:'Exploration'},
+  {t:'Skill constellation', p:'Mapping projects to capability nodes instead of fake percentage bars.', r:'Design exploration'},
+];
+const NOW = {
+  updated:'2026-06-14',
+  building:['Nirog Bhumi website systems','Student Social / PeerSpark app','This portfolio — Priyanshu OS'],
+  learning:['Better product architecture','Scalable web systems','Sharper AI workflows'],
+  exploring:['Voice-based websites','Conversational interfaces','Interactive proof-of-work'],
+  avoiding:['Template portfolios','Fake productivity','Random overthinking'],
+};
+
+/* ---------- CONVERSATION ENGINE (PRD §21) ---------- */
+const PERSON_CONTEXT = {
+  name:'Priyanshu Agarwal',
+  identity:'student turned builder, founder office operator, AI-native product thinker, and community builder from Jaipur',
+  current:'Founder’s Office / Operations & Technology at Nirog Bhumi, building health-tech website systems, content ops, commerce flows, and internal execution systems.',
+  positioning:'not just a developer, better described as a builder-operator who can move across code, product, AI workflows, operations, content, and community.',
+  projects:[
+    'Student Social / PeerSpark: AI-powered social learning app with pods, realtime chat, profiles, tasks, sessions, resources, and Appwrite backend.',
+    'Nirog Bhumi: website and business systems around e-commerce, consultations, Google Workspace, content operations, and founder-office execution.',
+    'Hackathon websites: Enigma and other hackathon/community websites with event operations, sponsorship support, and student community workflows.',
+    'Agency/client websites: PHP, HTML, WordPress, WooCommerce and Next.js builds for real use-cases.',
+    'AI QA testing workflow: using ChatGPT Agent Mode and Codex-style prompts to test complete platforms, find bugs, and generate fix instructions.',
+    'Community work: ChatGPT Roundtable Jaipur, ChatGPT Lab involvement, hackathons, and student ecosystem activities.'
+  ],
+  stack:['Next.js','React','Tailwind CSS','Appwrite','Vercel','PHP','WordPress','WooCommerce','Shopify APIs','GSAP','Three.js','Framer Motion','ChatGPT','Codex prompts'],
+  beliefs:[
+    'Proof of work beats permission.',
+    'Speed is a skill.',
+    'AI is leverage, not a replacement for thinking.',
+    'A messy shipped thing teaches more than a perfect idea.',
+    'Good taste is built by studying great work.',
+    'If I do not know something, I build my way into knowing it.'
+  ],
+  voice:'direct, ambitious, self-aware, a little humorous, honest about what is still in progress, never fake-corporate.'
+};
+
+const KB = [
+  {id:'identity', keys:['who is priyanshu','who are you','about priyanshu','introduce','portfolio','about me','what is this website'],
+   a:"This is Priyanshu Agarwal’s personal portfolio, not a generic AI website. I’m a builder-operator from Jaipur working across websites, apps, AI workflows, founder-office systems, and community projects. The useful version: I build fast, learn through shipping, and turn messy ideas into working systems.",
+   card:{type:'PERSONAL PORTFOLIO',title:'Priyanshu Agarwal',p:'Founder’s Office operator · AI-native builder · Product thinker · Community builder.'},
+   fu:['Show my best projects','What can I build?','Tell me my story','Why should a founder care?']},
+
+  {id:'best', keys:['best','strongest','top project','best work','best project','show projects','projects','work'],
+   a:"My strongest proof splits into three buckets. Most ambitious: Student Social, because it is a real app with pods, chat, AI mentors and Appwrite backend work. Most business-relevant: Nirog Bhumi, because it mixes web, commerce, content, operations and founder-office execution. Most community-heavy: hackathon and roundtable work, because it proves I can build with people, not just for screens.",
+   card:{type:'PROOF OF WORK',title:'Best projects by lens',p:'Student Social · Nirog Bhumi · Hackathon platforms · AI QA workflows · Agency/client sites.'},
+   fu:['Show Student Social','Show Nirog Bhumi','Show hackathon work','Show AI workflows']},
+
+  {id:'student-social', keys:['student social','peerspark','social learning','pods','chat app','appwrite','chat system','social app'],
+   a:"Student Social / PeerSpark is my social learning app. Think pods of students, realtime chat, profiles, tasks, sessions, resources and AI mentor-style workflows. My role is product plus builder: shaping the flow, building the frontend, wiring Appwrite, testing broken chat flows, and iterating the UX until it feels usable.",
+   card:{type:'PRODUCT BUILD',title:'Student Social / PeerSpark',p:'Next.js · Appwrite · Vercel · Tailwind · realtime chat · pods · student community.'},
+   fu:['What broke in it?','What is the stack?','Why is it ambitious?']},
+
+  {id:'nirog', keys:['nirog','nirog bhumi','nero boomi','health','founder office','job','current role','current work'],
+   a:"Nirog Bhumi is where my builder side meets real business execution. I’m involved in founder-office work: website direction, health-tech commerce flows, consultations, Google Workspace/shared-drive systems, content operations and general execution support. It is not just a website project. It is a system-building project around an actual business.",
+   card:{type:'FOUNDER’S OFFICE',title:'Nirog Bhumi',p:'Website systems · commerce thinking · consultations · content ops · founder execution.'},
+   fu:['What do I do in founder office?','Why should a founder care?','What am I building now?']},
+
+  {id:'hackathons', keys:['hackathon','enigma','event','sponsor','community','roundtable','chatgpt lab','chatgpt roundtable'],
+   a:"My community work includes hackathon websites, Enigma-style event systems, sponsorship support, student community work and the ChatGPT Roundtable Jaipur. This matters because it shows I can operate in public, coordinate people, build the digital layer and still care about the actual experience.",
+   card:{type:'COMMUNITY + OPS',title:'Hackathons and ChatGPT Roundtable',p:'Event websites · sponsorship systems · community execution · student ecosystem.'},
+   fu:['Show my best projects','Tell me my story','What can I do for communities?']},
+
+  {id:'agency', keys:['agency','client','php','wordpress','woocommerce','website','websites','html','shopify','custom website'],
+   a:"I’ve built a lot of website work across PHP, HTML, WordPress, WooCommerce, Next.js and agency/client-style projects. That part of my portfolio proves I can take a practical brief, ship something useful, and adapt the stack to the situation instead of forcing one trendy tool everywhere.",
+   card:{type:'WEB WORK',title:'Websites and client builds',p:'PHP · HTML · WordPress · WooCommerce · Next.js · Shopify/API thinking.'},
+   fu:['What is my stack?','Show Nirog Bhumi','Show proof of work']},
+
+  {id:'ai-workflow', keys:['ai','chatgpt','codex','automation','workflow','qa','testing','agent mode','prompt','prompts'],
+   a:"My AI workflow is one of my unfair advantages. I use ChatGPT and Codex-style prompts for QA testing, product thinking, bug discovery, UI critique, rewrite prompts and implementation planning. The important part: AI gives speed, but I still own taste, direction and responsibility.",
+   card:{type:'AI-NATIVE WORKFLOW',title:'AI as execution multiplier',p:'Agent-mode QA · fix prompts · product review · documentation · rapid iteration.'},
+   fu:['How do I test projects?','Am I actually technical?','Show failures']},
+
+  {id:'stack', keys:['stack','tech','technical','tools','languages','developer','frontend','backend'],
+   a:"My practical stack is Next.js, React, Tailwind, Appwrite, Vercel, PHP, WordPress, WooCommerce, Shopify APIs, GSAP, Three.js and AI tools like ChatGPT/Codex. But the cleaner positioning is builder-operator: I can code, think product, set up systems, run ops and use AI to move faster.",
+   card:{type:'STACK',title:'Build + Think + Operate',p:'Next.js · React · Tailwind · Appwrite · PHP · WordPress · WooCommerce · AI workflows.'},
+   fu:['Developer or operator?','Show projects','Why should a founder care?']},
+
+  {id:'founder-fit', keys:['founder','startup','hire','why hire','why should','useful','role','available','founder care','founders'],
+   a:"A founder should care because I’m useful in messy early-stage environments. I can take a vague idea, structure it, build the first version, test it, document it and improve the system around it. I’m not only waiting for perfect requirements. I can help create the requirements while shipping.",
+   card:{type:'FOUNDER FIT',title:'Useful in ambiguity',p:'Founder’s office · product ops · web/app builds · AI workflows · systems thinking.'},
+   fu:['Show founder-office work','Show actual experience','Contact Priyanshu']},
+
+  {id:'story', keys:['story','journey','college','left college','12th','route','background','education','unusual'],
+   a:"My story is not the clean traditional one. I learned by building: websites, communities, hackathon platforms, AI workflows and real business systems. I left the standard college path because I wanted more real-world responsibility and faster learning. The short version: I chose proof of work over waiting for permission.",
+   card:{type:'STORY',title:'The unusual route',p:'Curiosity → building → AI-native workflows → community → founder-office execution.'},
+   fu:['What do I believe?','Show my work','What am I building now?']},
+
+  {id:'beliefs', keys:['believe','belief','opinion','thinking','mindset','philosophy','how do you think'],
+   a:"I believe proof of work beats permission, speed is a skill, AI is leverage not a replacement, and messy shipped things teach more than perfect ideas. That is why this portfolio should not just say what I do. It should let people ask, inspect and experience the proof.",
+   card:{type:'BELIEFS',title:'How I think',p:'Proof over permission · speed · AI leverage · learning by shipping · taste through exposure.'},
+   fu:['Show proof','Tell me the story','Show failures']},
+
+  {id:'failures', keys:['fail','failure','broke','mistake','bugs','wrong','broken','what broke'],
+   a:"The honest part: things have broken. Chat flows, Appwrite permissions, UI direction, Git mistakes, unclear scopes and AI-generated code that looked confident but failed. The useful part: I test deeply, document what broke, write fix prompts, and rebuild around real behaviour instead of pretending everything was smooth.",
+   card:{type:'FAILURES I RESPECT',title:'What broke made the system sharper',p:'Chat bugs · permissions · Git mistakes · UI loops · unclear project scopes.'},
+   fu:['How do I fix things?','Show AI workflow','Show Student Social']},
+
+  {id:'now', keys:['now','currently','building now','right now','learning','exploring','current'],
+   a:"Right now I’m focused on Nirog Bhumi systems, Student Social, and this portfolio. I’m learning better product architecture, scalable web systems and sharper AI workflows. I’m exploring conversational interfaces and voice-based sites. I’m avoiding template portfolios and fake productivity.",
+   card:{type:'NOW',title:'Current focus',p:'Nirog Bhumi · Student Social · Priyanshu OS · conversational portfolio.'},
+   fu:['Show my best projects','What can I build?','Contact Priyanshu']},
+
+  {id:'contact', keys:['contact','email','reach','resume','collaborate','work with','connect'],
+   a:"You can reach out for founder-office roles, web/app projects, AI workflow systems, community/event collaborations, or product/ops work. The best message is simple: what you’re building, what problem exists, and where you think I can help.",
+   card:{type:'CONTACT',title:'Send a signal',p:'Founder-office · product/ops · web/app builds · AI workflows · collaborations.'},
+   fu:['What should I hire you for?','Show best work','Open recruiter mode']}
+];
+
+const FALLBACK = {
+  a:"I may not have an exact answer for that yet, but here is the useful context: this portfolio knows Priyanshu’s projects, story, stack, current role, AI workflows, failures, beliefs and collaboration fit. Ask about Student Social, Nirog Bhumi, hackathon sites, agency websites, AI QA workflows, or what he can build for you.",
+  fu:['Who is Priyanshu?','Show my best projects','What can I build?','Why should a founder care?']
+};
+
+function normalizeQuestion(value){
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function answerFor(text){
+  const q = normalizeQuestion(text);
+  if(!q) return FALLBACK;
+
+  let best = null;
+  let score = 0;
+
+  for(const item of KB){
+    let s = 0;
+    for(const k of item.keys){
+      const nk = normalizeQuestion(k);
+      if(q === nk) s += 80;
+      if(q.includes(nk)) s += nk.length * 3;
+      const words = nk.split(' ').filter(Boolean);
+      for(const w of words){
+        if(w.length > 3 && q.includes(w)) s += 4;
+      }
+    }
+    if(s > score){
+      score = s;
+      best = item;
+    }
+  }
+
+  if(best && score >= 8) return best;
+
+  const genericProjectWords = ['built','build','project','experience','work','portfolio','skills','skill'];
+  if(genericProjectWords.some(w => q.includes(w))) return KB.find(x => x.id === 'best');
+
+  return FALLBACK;
+}
+
+function answerFor(text){
+  const q=text.toLowerCase();
+  let best=null,score=0;
+  for(const item of KB){
+    let s=0; for(const k of item.keys){ if(q.includes(k)) s+=k.length; }
+    if(s>score){score=s;best=item;}
+  }
+  return best||FALLBACK;
+}
+
+/* ---------- RENDER CONTENT ---------- */
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function mockSVG(hue){
+  return `<svg class="mock" viewBox="0 0 380 200" preserveAspectRatio="none">
+    <defs><linearGradient id="g${hue.replace(/[^0-9]/g,'')}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="rgba(${hue},0.18)"/><stop offset="1" stop-color="rgba(${hue},0)"/></linearGradient></defs>
+    <rect width="380" height="200" fill="url(#g${hue.replace(/[^0-9]/g,'')})"/>
+    <g stroke="rgba(${hue},0.5)" fill="none" stroke-width="1">
+      <rect x="22" y="26" width="150" height="14" rx="3"/><rect x="22" y="50" width="100" height="8" rx="3" opacity=".5"/>
+      <rect x="22" y="92" width="336" height="48" rx="6"/><circle cx="320" cy="50" r="16"/>
+      <rect x="22" y="156" width="80" height="20" rx="10"/><rect x="116" y="156" width="80" height="20" rx="10" opacity=".5"/></g></svg>`;
+}
+const evTrack=document.getElementById('evTrack');
+PROJECTS.forEach(p=>{
+  evTrack.appendChild(el(`<article class="ev-card">
+    <div class="ev-visual"><span class="ev-tag">${p.tag}</span>${mockSVG(p.hue)}</div>
+    <div class="ev-body">
+      <div class="meta">${p.meta}</div><h3>${p.title}</h3><p>${p.desc}</p>
+      <div class="ev-actions">
+        <button class="chip solid" data-ask-q="${p.q}" data-cursor="Decode">Ask about this</button>
+        <button class="chip" data-ask-q="${p.q}" data-cursor="Open">Open proof</button>
+      </div>
+    </div></article>`));
+});
+const caseList=document.getElementById('caseList');
+CASES.forEach(c=>{
+  caseList.appendChild(el(`<div class="case-row reveal" data-ask-q="${c.q}" data-cursor="Open proof">
+    <span class="num">${c.n}</span>
+    <div><h3>${c.t}</h3><div class="stack">${c.s}</div></div>
+    <div class="desc-col desc">${c.d}</div>
+    <span class="arrow">→</span></div>`));
+});
+const dnaGrid=document.getElementById('dnaGrid');
+DNA.forEach(d=>dnaGrid.appendChild(el(`<div class="dna-card reveal"><div class="t">${d.t}</div><div class="p">${d.p}</div><div class="rel">Related: ${d.r}</div></div>`)));
+const timeline=document.getElementById('timeline');
+TIMELINE.forEach(t=>timeline.appendChild(el(`<div class="tl-item reveal"><div class="ch">${t.ch}</div><h4>${t.h}</h4><p>${t.p}</p></div>`)));
+const beliefs=document.getElementById('beliefs');
+BELIEFS.forEach(b=>beliefs.appendChild(el(`<div class="belief reveal">${b.t}<div class="why">${b.w}</div></div>`)));
+const flowGrid=document.getElementById('flowGrid');
+FLOW.forEach(f=>flowGrid.appendChild(el(`<div class="flow-card reveal"><div class="n">${f.n}</div><h4>${f.h}</h4><p>${f.p}</p></div>`)));
+const labGrid=document.getElementById('labGrid');
+LAB.forEach(l=>labGrid.appendChild(el(`<div class="dna-card reveal"><div class="rel" style="margin:0 0 12px;color:var(--red)">${l.r}</div><div class="t">${l.t}</div><div class="p">${l.p}</div></div>`)));
+const nowGrid=document.getElementById('nowGrid');
+nowGrid.appendChild(el(`<div class="now-card reveal"><div class="l"><span class="live"></span>Currently building</div><ul>${NOW.building.map(x=>`<li>${x}</li>`).join('')}</ul></div>`));
+nowGrid.appendChild(el(`<div class="now-card reveal"><div class="l">Currently learning</div><ul>${NOW.learning.map(x=>`<li>${x}</li>`).join('')}</ul></div>`));
+nowGrid.appendChild(el(`<div class="now-card reveal"><div class="l">Currently exploring</div><ul>${NOW.exploring.map(x=>`<li>${x}</li>`).join('')}</ul></div>`));
+document.getElementById('nowUpdated').textContent='LAST UPDATED · '+NOW.updated;
+
+/* ---------- BOOT SEQUENCE (PRD §13.1) ---------- */
+const bootLines=['Booting Priyanshu OS...','Loading projects...','Loading broken experiments...','Loading founder-office mode...','Loading ChatGPT chaos...','Loading proof-of-work...','System ready.'];
+const bootLog=document.getElementById('bootLog');
+const bootSkip=document.getElementById('boot-skip');
+function startSite(){
+  document.body.style.overflow='';
+  initSmoothScroll();
+  initHero();
+  buildRail();
+  setupScroll();
+  initEnhancements();
+}
+function endBoot(skip){
+  const boot=document.getElementById('boot');
+  if(reduced||skip){ boot.style.display='none'; startSite(); return; }
+  gsap.to(boot,{opacity:0,duration:.6,onComplete:()=>{boot.style.display='none';startSite();}});
+}
+(function runBoot(){
+  document.body.style.overflow='hidden';
+  if(reduced){ bootLines.forEach(l=>{const d=el(`<div class="ln" style="opacity:1">${l}</div>`);bootLog.appendChild(d);}); bootSkip.style.opacity='1'; setTimeout(()=>endBoot(true),300); return;}
+  let i=0; const min=1400, t0=Date.now();
+  setTimeout(()=>gsap.to(bootSkip,{opacity:1,duration:.3}),800);
+  bootSkip.onclick=()=>endBoot(true);
+  function next(){
+    if(i>=bootLines.length){ const wait=Math.max(0,min-(Date.now()-t0)); setTimeout(()=>endBoot(false),wait+300); return;}
+    const isLast=i===bootLines.length-1;
+    const line=el(`<div class="ln">${isLast?`<span class="ok">${bootLines[i]}</span>`:bootLines[i]}${isLast?' <span class="boot-caret"></span>':''}</div>`);
+    bootLog.appendChild(line);
+    gsap.to(line,{opacity:1,duration:.18});
+    i++; setTimeout(next, isLast?260: 220+Math.random()*120);
+  }
+  next();
+})();
+
+/* ---------- THREE.JS — SPARK ORB (PRD §12) ---------- */
+let orb, orbMat, particles, orbRenderer, orbState='idle', orbUniforms;
+function initHero(){
+  // hero headline reveal
+  if(!reduced){
+    gsap.to('#heroH .word i',{y:0,duration:1,ease:'expo.out',stagger:.08,delay:.1});
+    gsap.from('.hero-kicker,.hero-sub,.hero-micro,.hero-cta',{opacity:0,y:20,duration:.9,ease:'power3.out',stagger:.08,delay:.5});
+  } else { gsap.set('#heroH .word i',{y:0}); }
+  initOrb();
+}
+function initOrb(){
+  const canvas=document.getElementById('orb-canvas');
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(45,1,0.1,100); camera.position.z=4.2;
+  orbRenderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
+  orbRenderer.setPixelRatio(Math.min(window.devicePixelRatio,1.25));
+  function size(){const r=canvas.parentElement.getBoundingClientRect();orbRenderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();}
+  orbUniforms={uTime:{value:0},uAmp:{value:0.18},uState:{value:0},uColor:{value:new THREE.Color(0xC7FF3D)}};
+  const vert=`
+    varying vec3 vN; varying float vNoise; uniform float uTime; uniform float uAmp;
+    vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+    vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+    float snoise(vec3 v){
+      const vec2 C=vec2(1.0/6.0,1.0/3.0); const vec4 D=vec4(0.0,0.5,1.0,2.0);
+      vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);
+      vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.0-g; vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);
+      vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;
+      i=mod289(i); vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));
+      float n_=0.142857142857; vec3 ns=n_*D.wyz-D.xzx;
+      vec4 j=p-49.0*floor(p*ns.z*ns.z); vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.0*x_);
+      vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.0-abs(x)-abs(y);
+      vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw); vec4 s0=floor(b0)*2.0+1.0; vec4 s1=floor(b1)*2.0+1.0; vec4 sh=-step(h,vec4(0.0));
+      vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+      vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
+      vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+      p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
+      vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
+      return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+    }
+    void main(){
+      vN=normal; float n=snoise(normal*1.6+uTime*0.35); vNoise=n;
+      vec3 pos=position+normal*n*uAmp;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
+    }`;
+  const frag=`
+    varying vec3 vN; varying float vNoise; uniform vec3 uColor; uniform float uTime;
+    void main(){
+      vec3 viewDir=normalize(cameraPosition);
+      float fres=pow(1.0-abs(dot(normalize(vN),vec3(0.0,0.0,1.0))),2.2);
+      vec3 base=mix(vec3(0.02,0.02,0.02),uColor*0.55,smoothstep(-0.4,0.6,vNoise));
+      vec3 col=base+uColor*fres*1.3;
+      gl_FragColor=vec4(col,0.92);
+    }`;
+  orbMat=new THREE.ShaderMaterial({uniforms:orbUniforms,vertexShader:vert,fragmentShader:frag,transparent:true});
+  orb=new THREE.Mesh(new THREE.IcosahedronGeometry(1.15,reduced?8:24),orbMat); scene.add(orb);
+  // wireframe shell
+  const shell=new THREE.Mesh(new THREE.IcosahedronGeometry(1.32,3),new THREE.MeshBasicMaterial({color:0xC7FF3D,wireframe:true,transparent:true,opacity:0.08})); scene.add(shell);
+  // particles
+  if(!isTouch){
+    const cnt=140, geo=new THREE.BufferGeometry(), arr=new Float32Array(cnt*3);
+    for(let k=0;k<cnt;k++){const r=1.7+Math.random()*1.3,t=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
+      arr[k*3]=r*Math.sin(ph)*Math.cos(t);arr[k*3+1]=r*Math.sin(ph)*Math.sin(t);arr[k*3+2]=r*Math.cos(ph);}
+    geo.setAttribute('position',new THREE.BufferAttribute(arr,3));
+    particles=new THREE.Points(geo,new THREE.PointsMaterial({color:0xC7FF3D,size:0.022,transparent:true,opacity:0.7})); scene.add(particles);
+  }
+  size(); window.addEventListener('resize',size);
+  let mx=0,my=0; window.addEventListener('mousemove',e=>{mx=(e.clientX/innerWidth-0.5);my=(e.clientY/innerHeight-0.5);});
+  const clock=new THREE.Clock();
+  (function loop(){
+    requestAnimationFrame(loop);
+    const t=clock.getElapsedTime(); orbUniforms.uTime.value=t;
+    const sv=Math.min(0.22,(window.__scrollVel||0)*0.0009);
+    const target=(orbState==='idle'?0.18: orbState==='listening'?0.34: orbState==='thinking'?0.5: 0.4)+sv;
+    orbUniforms.uAmp.value+=(target-orbUniforms.uAmp.value)*0.05;
+    if(!reduced){
+      orb.rotation.y+=0.0025; orb.rotation.x=my*0.3; orb.rotation.z=mx*0.2;
+      shell.rotation.y-=0.0014; shell.rotation.x+=0.0008;
+      if(particles){particles.rotation.y=t*0.06; particles.rotation.x=t*0.03;}
+    }
+    orbRenderer.render(scene,camera);
+  })();
+}
+function setOrbState(s){
+  orbState=s;
+  const map={idle:'SPARK · IDLE',listening:'SPARK · LISTENING',thinking:'SPARK · THINKING',answering:'SPARK · ANSWERING'};
+  const elS=document.getElementById('orbStatus'); if(elS) elS.textContent=map[s]||map.idle;
+  const bs=document.getElementById('botState'); if(bs) bs.textContent=(map[s]||map.idle).replace('SPARK','SPARK');
+  if(orbUniforms){
+    const c= s==='thinking'?0x8FD8FF : 0xC7FF3D;
+    orbUniforms.uColor.value.set(c);
+  }
+}
+
+/* ---------- CUSTOM CURSOR ---------- */
+if(false && !isTouch && !reduced){
+  const dot=document.getElementById('cDot'),ring=document.getElementById('cRing'),label=document.getElementById('cLabel');
+  let rx=0,ry=0,tx=0,ty=0;
+  window.addEventListener('mousemove',e=>{tx=e.clientX;ty=e.clientY;dot.style.left=tx+'px';dot.style.top=ty+'px';label.style.left=tx+'px';label.style.top=ty+'px';});
+  (function ringLoop(){rx+=(tx-rx)*0.18;ry+=(ty-ry)*0.18;ring.style.left=rx+'px';ring.style.top=ry+'px';requestAnimationFrame(ringLoop);})();
+  document.addEventListener('mouseover',e=>{
+    const t=e.target.closest('[data-cursor]');
+    if(t){ring.classList.add('active');label.textContent=t.getAttribute('data-cursor');label.classList.add('show');}
+    else{ring.classList.remove('active');label.classList.remove('show');}
+  });
+}
+
+/* ---------- HEADER + RAIL + REVEALS (PRD §10) ---------- */
+const header=document.getElementById('header');
+addEventListener('scroll',()=>{header.classList.toggle('scrolled',scrollY>40);},{passive:true});
+function buildRail(){
+  const rail=document.getElementById('rail');
+  document.querySelectorAll('[data-rail]').forEach(sec=>{
+    const b=el(`<button data-cursor="Jump"><span class="tip">${sec.dataset.rail}</span></button>`);
+    b.onclick=()=>sec.scrollIntoView({behavior:'smooth'});
+    rail.appendChild(b);
+  });
+  const dots=[...rail.children], secs=[...document.querySelectorAll('[data-rail]')];
+  const io=new IntersectionObserver(es=>{es.forEach(en=>{if(en.isIntersecting){const i=secs.indexOf(en.target);dots.forEach((d,j)=>d.classList.toggle('on',j===i));}});},{threshold:.5});
+  secs.forEach(s=>io.observe(s));
+}
+function setupScroll(){
+  if(reduced){document.querySelectorAll('.reveal').forEach(r=>r.style.opacity=1);} else {
+    gsap.utils.toArray('.reveal:not(.sec-title):not(.contact-h)').forEach(r=>{
+      gsap.to(r,{opacity:1,y:0,duration:.9,ease:'power3.out',scrollTrigger:{trigger:r,start:'top 88%'}});
+    });
+    // evidence wall horizontal scroll
+    const track=document.getElementById('evTrack');
+    const dist=()=>Math.max(0,track.scrollWidth-innerWidth+80);
+    if(dist()>0){
+      gsap.to(track,{x:()=>-dist(),ease:'none',scrollTrigger:{trigger:'#evidence',start:'top top',end:()=>'+='+dist(),scrub:1,pin:true,invalidateOnRefresh:true}});
+    }
+    // timeline dots light on scroll
+    gsap.utils.toArray('.tl-item').forEach(it=>{
+      ScrollTrigger.create({trigger:it,start:'top 70%',onEnter:()=>it.classList.add('lit'),onLeaveBack:()=>it.classList.remove('lit')});
+    });
+    ScrollTrigger.refresh();
+  }
+}
+
+/* ---------- ASK OVERLAY / CONVERSATION ---------- */
+const askOverlay=document.getElementById('askOverlay'),askMsgs=document.getElementById('askMsgs'),
+      askInput=document.getElementById('askInput'),askSend=document.getElementById('askSend'),
+      promptChips=document.getElementById('promptChips');
+const STARTER=['Who is Priyanshu?','Show my best projects','What can I build?','Why should a founder care?','Show my actual experience','What am I building now?'];
+let lastAnswer='', greeted=false, typingTimer=null;
+function chipRow(arr,parent){ parent.innerHTML=''; arr.forEach(c=>{const b=el(`<button class="chip" data-cursor="Ask">${c}</button>`); b.onclick=()=>submit(c); parent.appendChild(b);}); }
+chipRow(STARTER,promptChips);
+function openAsk(prefill){
+  askOverlay.classList.add('open'); document.body.style.overflow='hidden'; lenisStop(); setOrbState('listening');
+  if(!greeted){ greeted=true; botSay({
+    a:"I’m Spark, the conversational layer of Priyanshu Agarwal’s portfolio. I can explain his real projects, current role, skills, story, AI workflows, failures, and collaboration fit. Ask naturally, for example: ‘What has Priyanshu built?’, ‘Why should a founder care?’, or ‘Show me Student Social.’",
+    card:{type:'PORTFOLIO CONTEXT',title:'Trained on Priyanshu’s work',p:'Student Social · Nirog Bhumi · hackathon platforms · agency websites · AI QA workflows · community work.'},
+    fu:STARTER.slice(0,4)
+  }); }
+  setTimeout(()=>askInput.focus(),300);
+  if(prefill){ submit(prefill); }
+}
+function closeAsk(){ askOverlay.classList.remove('open'); document.body.style.overflow=''; lenisStart(); setOrbState('idle'); }
+function addMsg(html,cls){const m=el(`<div class="msg ${cls}">${html}</div>`);askMsgs.appendChild(m);askMsgs.scrollTop=askMsgs.scrollHeight;return m;}
+function botSay(res){
+  setOrbState('thinking');
+  const wrap=addMsg(`<div class="who">SPARK</div><span class="txt"></span>`,'bot');
+  const txtEl=wrap.querySelector('.txt');
+  const finish=()=>{
+    lastAnswer=res.a;
+    if(res.card){ wrap.appendChild(el(`<div class="card-inline"><div class="ct">${res.card.type}</div><h5>${res.card.title}</h5><p>${res.card.p}</p></div>`)); }
+    wrap.appendChild(el(`<span class="speak" data-cursor="Listen">♪ Speak this</span>`)).onclick=()=>speak(res.a);
+    if(res.fu&&res.fu.length){const f=el(`<div class="followups"></div>`); res.fu.forEach(x=>{const b=el(`<button class="chip" data-cursor="Ask">${x}</button>`);b.onclick=()=>submit(x);f.appendChild(b);}); wrap.appendChild(f);}
+    askMsgs.scrollTop=askMsgs.scrollHeight; setOrbState('idle');
+  };
+  if(reduced){ txtEl.textContent=res.a; finish(); return; }
+  setOrbState('answering');
+  let i=0; clearTimeout(typingTimer);
+  (function type(){ if(i<=res.a.length){ txtEl.textContent=res.a.slice(0,i); i+=2; askMsgs.scrollTop=askMsgs.scrollHeight; typingTimer=setTimeout(type,12);} else { txtEl.textContent=res.a; finish(); } })();
+}
+function submit(text){
+  text=(text||askInput.value).trim(); if(!text) return;
+  askInput.value=''; addMsg(text,'user');
+  setTimeout(()=>botSay(answerFor(text)),260);
+}
+askSend.onclick=()=>submit();
+askInput.addEventListener('keydown',e=>{if(e.key==='Enter')submit();});
+document.getElementById('askClose').onclick=closeAsk;
+askOverlay.addEventListener('click',e=>{if(e.target===askOverlay)closeAsk();});
+// rotating placeholder
+const PH=['Ask what I have built…','Ask why I left the normal route…','Ask what I can do for a startup…','Ask about Student Social…','Ask what I am learning right now…','Ask for my resume…','Ask something chaotic…'];
+let phi=0; if(!reduced) setInterval(()=>{phi=(phi+1)%PH.length; askInput.placeholder=PH[phi];},3200);
+
+/* global hooks: data-ask, data-ask-q, data-mode */
+document.addEventListener('click',e=>{
+  const a=e.target.closest('[data-ask]'); if(a){e.preventDefault();openAsk();return;}
+  const q=e.target.closest('[data-ask-q]'); if(q){e.preventDefault();openAsk(q.getAttribute('data-ask-q'));return;}
+  const m=e.target.closest('[data-mode]'); if(m){e.preventDefault();setMode(m.getAttribute('data-mode'));}
+});
+
+/* ---------- VOICE (PRD §22 — browser fallback, never autoplay) ---------- */
+const voiceOrb=document.getElementById('voiceOrb');
+function speak(text){
+  if(!('speechSynthesis'in window)) return;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text.length>320?text.slice(0,320)+'…':text);
+  u.rate=1.02; u.pitch=1; voiceOrb.classList.add('speaking'); setOrbState('answering');
+  u.onend=()=>{voiceOrb.classList.remove('speaking');setOrbState(askOverlay.classList.contains('open')?'listening':'idle');};
+  speechSynthesis.speak(u);
+}
+voiceOrb.onclick=()=>{
+  if(voiceOrb.classList.contains('speaking')){speechSynthesis.cancel();voiceOrb.classList.remove('speaking');setOrbState('idle');return;}
+  speak(lastAnswer||"Hi, I'm Spark — Priyanshu's portfolio assistant. Open the ask panel and I'll tell you about his work.");
+};
+
+/* ---------- MODES (PRD §21.4) ---------- */
+const MODE_ACCENT={founder:'#C9A44C',recruiter:'#8FD8FF',builder:'#C7FF3D',story:'#F5F5F5',chaos:'#FF4D4D'};
+const MODE_LABEL={founder:"FOUNDER MODE · EXECUTION + OWNERSHIP",recruiter:"RECRUITER MODE · THE CLEAN VERSION",builder:"BUILDER MODE · HOW IT'S MADE",story:"STORY MODE · THE UNUSUAL ROUTE",chaos:"CHAOS MODE · BEHIND THE SCENES"};
+const banner=document.getElementById('modeBanner');
+let bannerTimer=null;
+function setMode(m){
+  const c=MODE_ACCENT[m]||'#C7FF3D';
+  document.documentElement.style.setProperty('--accent',c);
+  document.getElementById('bgGlow').style.background=`radial-gradient(circle, ${hexA(c,0.12)}, transparent 60%)`;
+  banner.textContent=MODE_LABEL[m]; banner.style.borderColor=c; banner.style.color=c; banner.classList.add('show');
+  clearTimeout(bannerTimer); bannerTimer=setTimeout(()=>banner.classList.remove('show'),2600);
+  if(m==='recruiter'){ document.getElementById('cases').scrollIntoView({behavior:'smooth'}); }
+}
+function hexA(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+
+/* ---------- COMMAND PALETTE (PRD §25.3) ---------- */
+const cmdk=document.getElementById('cmdk'),cmdkInput=document.getElementById('cmdkInput'),cmdkResults=document.getElementById('cmdkResults');
+const CMDS=[
+  {g:'Navigation',ico:'→',label:'Open Work',k:'W',act:()=>jump('#evidence')},
+  {g:'Navigation',ico:'→',label:'Open Story',k:'S',act:()=>jump('#story')},
+  {g:'Navigation',ico:'→',label:'Open Lab',k:'L',act:()=>jump('#lab')},
+  {g:'Navigation',ico:'→',label:'Open Now',k:'',act:()=>jump('#now')},
+  {g:'Navigation',ico:'→',label:'Open Contact',k:'',act:()=>jump('#contact')},
+  {g:'Questions',ico:'?',label:'Ask about Student Social',k:'',act:()=>openAsk('What is Student Social?')},
+  {g:'Questions',ico:'?',label:'Ask about Nirog Bhumi',k:'',act:()=>openAsk('What did Priyanshu do at Nirog Bhumi?')},
+  {g:'Questions',ico:'?',label:'What can you do for a startup?',k:'',act:()=>openAsk('What can you do for a startup?')},
+  {g:'Questions',ico:'?',label:'Show me failures',k:'',act:()=>openAsk('Show me failures')},
+  {g:'Actions',ico:'✦',label:'Talk to Priyanshu OS',k:'/',act:()=>openAsk()},
+  {g:'Actions',ico:'◆',label:'Switch to Founder Mode',k:'',act:()=>setMode('founder')},
+  {g:'Actions',ico:'◆',label:'Switch to Recruiter Mode',k:'R',act:()=>setMode('recruiter')},
+  {g:'Actions',ico:'◆',label:'Switch to Builder Mode',k:'',act:()=>setMode('builder')},
+  {g:'Actions',ico:'◆',label:'Switch to Chaos Mode',k:'',act:()=>setMode('chaos')},
+  {g:'Actions',ico:'♪',label:'Toggle Voice (speak last answer)',k:'V',act:()=>voiceOrb.click()},
+];
+let cmdkSel=0,cmdkFiltered=CMDS;
+function jump(s){closeCmdk();smoothTo(document.querySelector(s));}
+function renderCmdk(){
+  const q=cmdkInput.value.toLowerCase();
+  cmdkFiltered=CMDS.filter(c=>c.label.toLowerCase().includes(q));
+  cmdkSel=0; let html='',group='';
+  cmdkFiltered.forEach((c,i)=>{ if(c.g!==group){group=c.g;html+=`<div class="cmdk-group">${group}</div>`;}
+    html+=`<div class="cmdk-item ${i===0?'sel':''}" data-i="${i}"><span class="ico">${c.ico}</span>${c.label}${c.k?`<span class="k">${c.k}</span>`:''}</div>`;});
+  if(!cmdkFiltered.length) html=`<div class="cmdk-group">No matches — try "ask", "work", "mode"…</div>`;
+  cmdkResults.innerHTML=html;
+  cmdkResults.querySelectorAll('.cmdk-item').forEach(it=>{it.onclick=()=>cmdkFiltered[+it.dataset.i].act();});
+}
+function openCmdk(){cmdk.classList.add('open');document.body.style.overflow='hidden';lenisStop();cmdkInput.value='';renderCmdk();setTimeout(()=>cmdkInput.focus(),100);}
+function closeCmdk(){cmdk.classList.remove('open');if(!askOverlay.classList.contains('open')){document.body.style.overflow='';lenisStart();}}
+cmdkInput.addEventListener('input',renderCmdk);
+cmdkInput.addEventListener('keydown',e=>{
+  const items=cmdkResults.querySelectorAll('.cmdk-item'); if(!items.length)return;
+  if(e.key==='ArrowDown'){e.preventDefault();cmdkSel=(cmdkSel+1)%items.length;}
+  else if(e.key==='ArrowUp'){e.preventDefault();cmdkSel=(cmdkSel-1+items.length)%items.length;}
+  else if(e.key==='Enter'){e.preventDefault();cmdkFiltered[cmdkSel]&&cmdkFiltered[cmdkSel].act();return;}
+  items.forEach((it,i)=>it.classList.toggle('sel',i===cmdkSel));
+  items[cmdkSel].scrollIntoView({block:'nearest'});
+});
+cmdk.addEventListener('click',e=>{if(e.target===cmdk)closeCmdk();});
+
+/* ---------- KEYBOARD SHORTCUTS (PRD §11.2) ---------- */
+addEventListener('keydown',e=>{
+  const typing=/input|textarea/i.test(document.activeElement.tagName);
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();cmdk.classList.contains('open')?closeCmdk():openCmdk();return;}
+  if(e.key==='Escape'){closeAsk();closeCmdk();return;}
+  if(typing)return;
+  switch(e.key.toLowerCase()){
+    case'/':e.preventDefault();openAsk();break;
+    case'm':setMode('founder');break;
+    case'v':voiceOrb.click();break;
+    case'r':setMode('recruiter');break;
+    case'w':jump('#evidence');break;
+    case's':jump('#story');break;
+    case'l':jump('#lab');break;
+  }
+});
+
+/* ============================================================
+   INTERACTIVE ENHANCEMENT LAYER (v2)
+   ============================================================ */
+let lenis=null;
+function initSmoothScroll(){
+  if(reduced || isTouch || innerWidth < 880 || typeof Lenis==='undefined') return;
+  lenis=new Lenis({duration:0.65, easing:t=>Math.min(1,1.001-Math.pow(2,-10*t)), smoothWheel:true, wheelMultiplier:0.85});
+  lenis.on('scroll', ScrollTrigger.update);
+  gsap.ticker.add(t=>lenis.raf(t*1000));
+  gsap.ticker.lagSmoothing(0);
+}
+function lenisStop(){ if(lenis) lenis.stop(); }
+function lenisStart(){ if(lenis) lenis.start(); }
+function smoothTo(target){
+  if(!target) return;
+  if(lenis) lenis.scrollTo(target,{offset:-40,duration:1.2});
+  else target.scrollIntoView({behavior:'smooth'});
+}
+// route every in-page anchor through smooth scroll
+document.addEventListener('click',e=>{
+  const a=e.target.closest('a[href^="#"]'); if(!a) return;
+  const id=a.getAttribute('href'); if(id.length<2) return;
+  const t=document.querySelector(id); if(t){e.preventDefault(); smoothTo(t);}
+});
+
+function initEnhancements(){
+  buildMarquee();
+  if(reduced){ document.querySelectorAll('.line-inner').forEach(l=>l.style.transform='none'); return; }
+  splitTitles();
+  lineReveals();
+  scrambleEyebrows();
+  parallaxLayers();
+  mouseParallax();
+  magneticTargets();
+  tiltCards();
+  velocitySkew();
+  scrollProgress();
+  ScrollTrigger.refresh();
+}
+
+/* ---- masked line reveals for big titles ---- */
+function splitTitles(){
+  document.querySelectorAll('.sec-title.reveal, .contact-h.reveal').forEach(h=>{
+    h.style.opacity=1; h.style.transform='none';
+    const lines=h.innerHTML.split(/<br\s*\/?>/i);
+    h.innerHTML=lines.map(ln=>`<span class="line-mask"><span class="line-inner">${ln}</span></span>`).join('');
+  });
+}
+function lineReveals(){
+  document.querySelectorAll('.sec-title, .contact-h').forEach(h=>{
+    const inners=h.querySelectorAll('.line-inner'); if(!inners.length) return;
+    gsap.to(inners,{y:0,duration:1,ease:'expo.out',stagger:.09,
+      scrollTrigger:{trigger:h,start:'top 85%'}});
+  });
+}
+
+/* ---- text scramble decode on eyebrows ---- */
+const GLYPHS='ABCDEFGHJKLMNPQRSTUVWXYZ0123456789/<>*#';
+function scramble(node){
+  const final=node.dataset.final; let frame=0; const total=final.length*2+8;
+  const tick=()=>{
+    let out=''; for(let i=0;i<final.length;i++){
+      if(frame> i*2+6 || final[i]===' ') out+=final[i];
+      else out+=GLYPHS[(Math.random()*GLYPHS.length)|0];
+    }
+    node.textContent=out; frame++;
+    if(frame<=total) requestAnimationFrame(tick); else node.textContent=final;
+  }; tick();
+}
+function scrambleEyebrows(){
+  document.querySelectorAll('.eyebrow').forEach(e=>{
+    e.dataset.final=e.textContent;
+    ScrollTrigger.create({trigger:e,start:'top 90%',once:true,onEnter:()=>scramble(e)});
+  });
+}
+
+/* ---- scroll parallax on ambient + decorative layers ---- */
+function parallaxLayers(){
+  gsap.to('.bg-grid',{yPercent:18,ease:'none',scrollTrigger:{trigger:document.body,start:'top top',end:'bottom bottom',scrub:true}});
+  // fade/lift the whole hero as you leave it (container only — children handle mouse parallax)
+  gsap.to('#hero .hero-grid',{yPercent:10,opacity:.25,ease:'none',scrollTrigger:{trigger:'#hero',start:'top top',end:'bottom top',scrub:true}});
+  gsap.to('#bgGlow',{opacity:.55,ease:'none',scrollTrigger:{trigger:'#story',start:'top center',end:'bottom center',scrub:true}});
+}
+
+/* ---- mouse parallax (hero depth) ---- */
+function mouseParallax(){
+  if(isTouch) return;
+  const orb=document.querySelector('.hero-orb'), left=document.querySelector('.hero-left'), glow=document.getElementById('bgGlow');
+  let tx=0,ty=0,cx=0,cy=0;
+  window.addEventListener('mousemove',e=>{tx=(e.clientX/innerWidth-0.5);ty=(e.clientY/innerHeight-0.5);});
+  (function p(){ cx+=(tx-cx)*.06; cy+=(ty-cy)*.06;
+    if(orb){orb.style.transform=`translate(${cx*38}px,${cy*30}px)`;}
+    if(left){left.style.transform=`translate(${cx*-14}px,${cy*-10}px)`;}
+    if(glow){glow.style.transform=`translateX(-50%) translate(${cx*60}px,${cy*40}px)`;}
+    requestAnimationFrame(p);
+  })();
+}
+
+/* ---- magnetic buttons ---- */
+function magneticTargets(){
+  if(isTouch) return;
+  document.querySelectorAll('.btn,.route,.btn-ask,.ask-dock,.chip.solid,.voice-orb').forEach(b=>{
+    b.classList.add('magnetic');
+    const strength=b.classList.contains('voice-orb')?0.4:0.35;
+    b.addEventListener('mousemove',e=>{
+      const r=b.getBoundingClientRect();
+      gsap.to(b,{x:(e.clientX-(r.left+r.width/2))*strength, y:(e.clientY-(r.top+r.height/2))*strength, duration:.4, ease:'power3.out'});
+    });
+    b.addEventListener('mouseleave',()=>gsap.to(b,{x:0,y:0,duration:.5,ease:'elastic.out(1,0.4)'}));
+  });
+}
+
+/* ---- 3D tilt + glare on cards ---- */
+function tiltCards(){
+  if(isTouch) return;
+  document.querySelectorAll('.mode-card,.dna-card,.flow-card,.ev-card,.now-card').forEach(card=>{
+    card.classList.add('tilt');
+    const glare=el('<span class="tilt-glare"></span>'); card.appendChild(glare);
+    const max=7;
+    card.addEventListener('mousemove',e=>{
+      const r=card.getBoundingClientRect(), px=(e.clientX-r.left)/r.width, py=(e.clientY-r.top)/r.height;
+      gsap.to(card,{rotateY:(px-.5)*max*2, rotateX:(.5-py)*max*2, transformPerspective:900, duration:.4, ease:'power2.out'});
+      glare.style.setProperty('--gx',px*100+'%'); glare.style.setProperty('--gy',py*100+'%');
+    });
+    card.addEventListener('mouseleave',()=>gsap.to(card,{rotateX:0,rotateY:0,duration:.6,ease:'power3.out'}));
+  });
+}
+
+/* ---- kinetic marquee with velocity-reactive speed ---- */
+const MARQUEE_WORDS=['SHIP FAST','PROOF OF WORK','AI-NATIVE','SYSTEMS THINKING','BUILD','OPERATE','LEARN IN PUBLIC','FOUNDER MODE','TASTE','OWNERSHIP'];
+function buildMarquee(){
+  const track=document.getElementById('marquee'); if(!track) return;
+  const seq=MARQUEE_WORDS.map(w=>`<span class="item">${w}<span class="star">✦</span></span>`).join('');
+  track.innerHTML=seq+seq+seq;
+  if(reduced) return;
+  let x=0;
+  gsap.ticker.add(()=>{
+    const v=lenis? lenis.velocity : (window.__scrollVel||0)*0.04;
+    x-=(1.1+Math.abs(v)*0.6);
+    const w=track.scrollWidth/3;
+    if(-x>=w) x+=w;
+    track.style.transform=`translateX(${x}px) skewX(${Math.max(-8,Math.min(8,(v||0)*-0.4))}deg)`;
+  });
+}
+
+/* ---- global scroll velocity signal (feeds orb + marquee) ---- */
+function velocitySkew(){
+  let prev=0, vel=0;
+  gsap.ticker.add(()=>{
+    const y=lenis? lenis.scroll : scrollY;
+    vel+=((y-prev)-vel)*0.2; prev=y; window.__scrollVel=vel;
+  });
+}
+
+/* ---- scroll progress bar ---- */
+function scrollProgress(){
+  const bar=document.getElementById('scrollProgress');
+  const upd=()=>{const h=document.documentElement.scrollHeight-innerHeight; const p=h>0?(lenis?lenis.scroll:scrollY)/h:0; bar.style.transform=`scaleX(${Math.min(1,p)})`;};
+  if(lenis) lenis.on('scroll',upd); else addEventListener('scroll',upd,{passive:true});
+  upd();
+}
+
+
+/* ============================================================
+   V3 OPTIMIZATION PATCH — cleaner portfolio hero, no top nav clutter, smoother runtime
+   ============================================================ */
+function initEnhancements(){
+  buildMarquee();
+  if(reduced){ document.querySelectorAll('.line-inner').forEach(l=>l.style.transform='none'); return; }
+  splitTitles();
+  lineReveals();
+  scrambleEyebrows();
+  // Heavy hover/parallax/magnetic effects intentionally disabled for a smoother portfolio feel.
+  // Sections, content, ask overlay, orb, marquee, and bottom nav remain intact.
+  velocitySkew();
+  scrollProgress();
+  ScrollTrigger.refresh();
+}
+
+setTimeout(()=>{const b=document.getElementById('boot');if(b&&b.style.display!=='none'&&getComputedStyle(b).opacity!=='0'){endBoot(true);}},5000);
+</script>
+</body>
+</html>
