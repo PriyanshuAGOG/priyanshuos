@@ -12,7 +12,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
 <!-- Premium libs -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lenis/1.1.13/lenis.min.js"></script>
@@ -542,9 +541,106 @@ section{scroll-margin-top:110px;}
 }
 @media(max-width:420px){
   .hero-h{font-size:42px;}
-  .hero-orb{height:220px; min-height:210px;}
   .top-connect{font-size:0; width:40px; padding:0; justify-content:center;}
   .top-connect:after{content:'Ask'; font-size:12px;}
+}
+
+/* ============================================================
+   V4 — INTERACTIVE SPARK AGENT + EXTREME SCROLL FX + HERO FIT
+   ============================================================ */
+
+/* ---- HERO FITS THE VIEWPORT ---- */
+#hero{height:100svh; min-height:100svh; max-height:100svh; overflow:hidden;
+  padding-top:clamp(80px,11vh,120px); padding-bottom:clamp(60px,9vh,110px);}
+#orb-canvas{display:none!important;}
+
+/* ---- SPARK AGENT ---- */
+.spark{position:relative; width:min(100%,clamp(240px,30vw,440px)); aspect-ratio:1/1;
+  margin:0 auto; display:flex; align-items:center; justify-content:center;
+  cursor:pointer; --ex:0; --ey:0; --tilt:0deg; --sq:1; --press:1;
+  transition:transform .5s var(--ease); transform:scale(var(--press));}
+.spark:focus-visible{outline:none}
+.spark:focus-visible .spark-core{box-shadow:0 0 0 3px rgba(199,255,61,.5), inset 0 0 60px rgba(199,255,61,.12)}
+.spark-aura{position:absolute; inset:-12%; border-radius:50%;
+  background:radial-gradient(circle at 50% 45%, var(--spark-glow,rgba(199,255,61,.42)), transparent 62%);
+  filter:blur(22px); opacity:.55; transition:opacity .5s var(--ease), background .6s var(--ease);
+  animation:sparkBreath 5.5s var(--ease) infinite;}
+.spark-ring{position:absolute; border-radius:50%; border:1px solid rgba(199,255,61,.18);
+  transition:border-color .5s var(--ease);}
+.spark-ring.r1{inset:2%; border-color:rgba(199,255,61,.22); animation:spin 26s linear infinite;}
+.spark-ring.r2{inset:10%; border-style:dashed; border-color:rgba(255,255,255,.12); animation:spin 18s linear infinite reverse;}
+.spark-ring.r3{inset:-6%; border-color:rgba(143,216,255,.10); animation:spin 40s linear infinite;}
+.spark-core{position:relative; width:64%; height:64%; border-radius:50%;
+  background:radial-gradient(circle at 38% 32%, #1c1c1c 0%, #0c0c0c 46%, #050505 100%);
+  box-shadow:inset 0 0 50px rgba(0,0,0,.85), inset 0 6px 20px rgba(255,255,255,.05),
+    0 24px 70px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06);
+  transform:rotateX(calc(var(--ey)*-0.05deg)) rotateY(calc(var(--ex)*0.05deg)) rotate(var(--tilt)) scaleY(var(--sq));
+  transition:transform .25s var(--ease), box-shadow .5s var(--ease); transform-style:preserve-3d; overflow:hidden;}
+.spark-gloss{position:absolute; top:8%; left:14%; width:48%; height:34%; border-radius:50%;
+  background:radial-gradient(circle at 40% 35%, rgba(255,255,255,.28), transparent 70%); filter:blur(3px); pointer-events:none;}
+.spark-face{position:absolute; inset:0; width:100%; height:100%; overflow:visible;}
+.spark-face .eyes{transform:translate(calc(var(--ex)*1px), calc(var(--ey)*1px)); transition:transform .12s linear;}
+.spark-face .eye{fill:var(--spark-eye,#C7FF3D); transform-box:fill-box; transform-origin:center;
+  filter:drop-shadow(0 0 6px var(--spark-eye,rgba(199,255,61,.8))); transition:fill .4s var(--ease), height .25s var(--ease), y .25s var(--ease);}
+.spark.blink .spark-face .eye{transform:scaleY(.08);}
+.spark-face .mouth{stroke:var(--spark-eye,#C7FF3D); stroke-width:3; stroke-linecap:round;
+  filter:drop-shadow(0 0 5px var(--spark-eye,rgba(199,255,61,.7))); opacity:.65; transition:opacity .3s var(--ease), stroke .4s var(--ease);}
+.spark-sparks{position:absolute; inset:0; pointer-events:none;}
+.spark-sparks i{position:absolute; top:50%; left:50%; width:3px; height:3px; border-radius:50%;
+  background:var(--spark-eye,#C7FF3D); box-shadow:0 0 8px var(--spark-eye,#C7FF3D); opacity:0;}
+.spark-hint{position:absolute; bottom:-2%; left:50%; transform:translate(-50%,8px); white-space:nowrap;
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); background:rgba(5,5,5,.7); border:1px solid rgba(199,255,61,.3);
+  padding:7px 14px; border-radius:999px; opacity:0; pointer-events:none; transition:opacity .35s var(--ease), transform .35s var(--ease); backdrop-filter:blur(10px);}
+.spark:hover .spark-hint, .spark.alert .spark-hint{opacity:1; transform:translate(-50%,0);}
+.spark:hover, .spark.alert{--spark-glow:rgba(199,255,61,.7);}
+.spark:hover .spark-core, .spark.alert .spark-core{box-shadow:inset 0 0 50px rgba(0,0,0,.7), 0 24px 80px rgba(199,255,61,.22), 0 0 0 1px rgba(199,255,61,.35);}
+.spark:hover .spark-aura, .spark.alert .spark-aura{opacity:.95;}
+.spark:active{--press:.94;}
+/* states */
+.spark.listening{--spark-glow:rgba(199,255,61,.85);}
+.spark.listening .spark-ring.r1{animation-duration:8s;}
+.spark.thinking{--spark-eye:#8FD8FF; --spark-glow:rgba(143,216,255,.6);}
+.spark.thinking .spark-ring.r2{animation-duration:5s;}
+.spark.answering .spark-face .mouth{opacity:1;}
+.spark.answering .spark-aura{animation-duration:1.4s;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes sparkBreath{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+body.reduced .spark-ring, body.reduced .spark-aura{animation:none!important;}
+
+/* ---- EXTREME SCROLL FX HELPERS ---- */
+[data-fx]{will-change:transform,opacity;}
+.fx-section{position:relative;}
+section[data-rail]{position:relative;}
+.fx-curtain{position:absolute; inset:0; background:linear-gradient(180deg,var(--black),transparent 14%,transparent 86%,var(--black)); pointer-events:none; z-index:1; opacity:.0;}
+body.reduced [data-fx]{transform:none!important; opacity:1!important;}
+
+/* ---- HERO-FIT RESPONSIVE TUNING ---- */
+@media(max-width:980px){
+  .hero-orb{order:0; height:auto; min-height:0; margin:0 auto;}
+  .spark{width:clamp(170px,42vw,260px);}
+}
+@media(max-width:640px){
+  #hero{padding-top:72px; padding-bottom:78px; align-items:center;}
+  .hero-grid{gap:clamp(6px,2vh,18px);}
+  .spark{width:clamp(118px,36vw,166px);}
+  .hero-h{font-size:clamp(36px,12.5vw,54px); line-height:1.0;}
+  .hero-sub{margin-top:12px; font-size:14px; line-height:1.5; max-width:560px;}
+  .hero-micro,.hero-proof{display:none;}
+  .hero-cta{margin-top:18px; gap:8px;}
+  .hero-cta .btn{height:44px; font-size:14px;}
+}
+/* short viewports: compress hero so it always fits */
+@media(max-height:760px) and (min-width:981px){
+  .hero-h{font-size:clamp(46px,6vw,80px);} .hero-sub{margin-top:16px;} .hero-cta{margin-top:22px;}
+  .hero-proof{margin-top:16px;} .spark{width:clamp(210px,25vw,340px);}
+}
+@media(max-height:640px) and (max-width:980px){
+  .spark{width:clamp(96px,24vw,140px);} .hero-sub{margin-top:10px; font-size:13.5px;}
+  .hero-cta{margin-top:14px;} .hero-cta .btn{height:42px;}
+}
+@media(max-height:560px){
+  .hero-sub{display:none;} .hero-h{font-size:clamp(32px,7vw,52px);}
 }
 
 </style>
@@ -617,7 +713,24 @@ section{scroll-margin-top:110px;}
         </div>
       </div>
       <div class="hero-orb">
-        <canvas id="orb-canvas"></canvas>
+        <div class="spark" id="spark" data-cursor="Ask" role="button" tabindex="0" aria-label="Spark — talk to the portfolio agent">
+          <div class="spark-aura"></div>
+          <div class="spark-ring r1"></div>
+          <div class="spark-ring r2"></div>
+          <div class="spark-ring r3"></div>
+          <div class="spark-core">
+            <div class="spark-gloss"></div>
+            <svg class="spark-face" viewBox="0 0 120 120" aria-hidden="true">
+              <g class="eyes">
+                <rect class="eye eye-l" x="36" y="48" width="14" height="24" rx="7"></rect>
+                <rect class="eye eye-r" x="70" y="48" width="14" height="24" rx="7"></rect>
+              </g>
+              <path class="mouth" d="M44 84 Q60 90 76 84" fill="none"></path>
+            </svg>
+          </div>
+          <div class="spark-sparks" id="sparkParticles" aria-hidden="true"></div>
+          <div class="spark-hint" id="sparkHint">Click to talk →</div>
+        </div>
         <div class="orb-status"><span class="pulse"></span><span id="orbStatus">SPARK · IDLE</span></div>
       </div>
     </div>
@@ -1029,16 +1142,6 @@ function answerFor(text){
   return FALLBACK;
 }
 
-function answerFor(text){
-  const q=text.toLowerCase();
-  let best=null,score=0;
-  for(const item of KB){
-    let s=0; for(const k of item.keys){ if(q.includes(k)) s+=k.length; }
-    if(s>score){score=s;best=item;}
-  }
-  return best||FALLBACK;
-}
-
 /* ---------- RENDER CONTENT ---------- */
 function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
 function mockSVG(hue){
@@ -1121,98 +1224,97 @@ function endBoot(skip){
   next();
 })();
 
-/* ---------- THREE.JS — SPARK ORB (PRD §12) ---------- */
-let orb, orbMat, particles, orbRenderer, orbState='idle', orbUniforms;
+/* ---------- SPARK STATE ---------- */
+let orbState='idle';
 function initHero(){
   // hero headline reveal
   if(!reduced){
     gsap.to('#heroH .word i',{y:0,duration:1,ease:'expo.out',stagger:.08,delay:.1});
     gsap.from('.hero-kicker,.hero-sub,.hero-micro,.hero-cta',{opacity:0,y:20,duration:.9,ease:'power3.out',stagger:.08,delay:.5});
   } else { gsap.set('#heroH .word i',{y:0}); }
-  initOrb();
+  initSpark();
 }
-function initOrb(){
-  const canvas=document.getElementById('orb-canvas');
-  const scene=new THREE.Scene();
-  const camera=new THREE.PerspectiveCamera(45,1,0.1,100); camera.position.z=4.2;
-  orbRenderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
-  orbRenderer.setPixelRatio(Math.min(window.devicePixelRatio,1.25));
-  function size(){const r=canvas.parentElement.getBoundingClientRect();orbRenderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();}
-  orbUniforms={uTime:{value:0},uAmp:{value:0.18},uState:{value:0},uColor:{value:new THREE.Color(0xC7FF3D)}};
-  const vert=`
-    varying vec3 vN; varying float vNoise; uniform float uTime; uniform float uAmp;
-    vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
-    vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
-    vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
-    vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
-    float snoise(vec3 v){
-      const vec2 C=vec2(1.0/6.0,1.0/3.0); const vec4 D=vec4(0.0,0.5,1.0,2.0);
-      vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);
-      vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.0-g; vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);
-      vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;
-      i=mod289(i); vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));
-      float n_=0.142857142857; vec3 ns=n_*D.wyz-D.xzx;
-      vec4 j=p-49.0*floor(p*ns.z*ns.z); vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.0*x_);
-      vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.0-abs(x)-abs(y);
-      vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw); vec4 s0=floor(b0)*2.0+1.0; vec4 s1=floor(b1)*2.0+1.0; vec4 sh=-step(h,vec4(0.0));
-      vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
-      vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
-      vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
-      p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;
-      vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
-      return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
-    }
-    void main(){
-      vN=normal; float n=snoise(normal*1.6+uTime*0.35); vNoise=n;
-      vec3 pos=position+normal*n*uAmp;
-      gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);
-    }`;
-  const frag=`
-    varying vec3 vN; varying float vNoise; uniform vec3 uColor; uniform float uTime;
-    void main(){
-      vec3 viewDir=normalize(cameraPosition);
-      float fres=pow(1.0-abs(dot(normalize(vN),vec3(0.0,0.0,1.0))),2.2);
-      vec3 base=mix(vec3(0.02,0.02,0.02),uColor*0.55,smoothstep(-0.4,0.6,vNoise));
-      vec3 col=base+uColor*fres*1.3;
-      gl_FragColor=vec4(col,0.92);
-    }`;
-  orbMat=new THREE.ShaderMaterial({uniforms:orbUniforms,vertexShader:vert,fragmentShader:frag,transparent:true});
-  orb=new THREE.Mesh(new THREE.IcosahedronGeometry(1.15,reduced?8:24),orbMat); scene.add(orb);
-  // wireframe shell
-  const shell=new THREE.Mesh(new THREE.IcosahedronGeometry(1.32,3),new THREE.MeshBasicMaterial({color:0xC7FF3D,wireframe:true,transparent:true,opacity:0.08})); scene.add(shell);
-  // particles
+
+/* ---------- INTERACTIVE SPARK AGENT (PRD §12) ---------- */
+let sparkEl=null, sparkMouth=null, sparkState='idle', sparkBlinkT=null;
+function initSpark(){
+  sparkEl=document.getElementById('spark');
+  if(!sparkEl) return;
+  sparkMouth=sparkEl.querySelector('.mouth');
+
+  // click / keyboard -> open the conversation
+  const go=()=>{ sparkEl.classList.add('alert'); openAsk(); };
+  sparkEl.addEventListener('click',go);
+  sparkEl.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();go();} });
+  sparkEl.addEventListener('mouseenter',()=>sparkEl.classList.add('alert'));
+  sparkEl.addEventListener('mouseleave',()=>{ if(!askOverlay.classList.contains('open')) sparkEl.classList.remove('alert'); });
+
+  // eyes + core track the cursor
   if(!isTouch){
-    const cnt=140, geo=new THREE.BufferGeometry(), arr=new Float32Array(cnt*3);
-    for(let k=0;k<cnt;k++){const r=1.7+Math.random()*1.3,t=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
-      arr[k*3]=r*Math.sin(ph)*Math.cos(t);arr[k*3+1]=r*Math.sin(ph)*Math.sin(t);arr[k*3+2]=r*Math.cos(ph);}
-    geo.setAttribute('position',new THREE.BufferAttribute(arr,3));
-    particles=new THREE.Points(geo,new THREE.PointsMaterial({color:0xC7FF3D,size:0.022,transparent:true,opacity:0.7})); scene.add(particles);
+    window.addEventListener('mousemove',e=>{
+      const r=sparkEl.getBoundingClientRect(); if(!r.width) return;
+      let dx=(e.clientX-(r.left+r.width/2))/(r.width/2), dy=(e.clientY-(r.top+r.height/2))/(r.height/2);
+      const m=Math.hypot(dx,dy); if(m>1){dx/=m;dy/=m;}
+      sparkEl.style.setProperty('--ex',(dx*7).toFixed(2));
+      sparkEl.style.setProperty('--ey',(dy*7).toFixed(2));
+    },{passive:true});
   }
-  size(); window.addEventListener('resize',size);
-  let mx=0,my=0; window.addEventListener('mousemove',e=>{mx=(e.clientX/innerWidth-0.5);my=(e.clientY/innerHeight-0.5);});
-  const clock=new THREE.Clock();
-  (function loop(){
-    requestAnimationFrame(loop);
-    const t=clock.getElapsedTime(); orbUniforms.uTime.value=t;
-    const sv=Math.min(0.22,(window.__scrollVel||0)*0.0009);
-    const target=(orbState==='idle'?0.18: orbState==='listening'?0.34: orbState==='thinking'?0.5: 0.4)+sv;
-    orbUniforms.uAmp.value+=(target-orbUniforms.uAmp.value)*0.05;
-    if(!reduced){
-      orb.rotation.y+=0.0025; orb.rotation.x=my*0.3; orb.rotation.z=mx*0.2;
-      shell.rotation.y-=0.0014; shell.rotation.x+=0.0008;
-      if(particles){particles.rotation.y=t*0.06; particles.rotation.x=t*0.03;}
+
+  if(reduced){ if(sparkMouth) sparkMouth.setAttribute('d','M44 84 Q60 90 76 84'); return; }
+
+  // particles
+  const pc=document.getElementById('sparkParticles');
+  const N=isTouch?9:18;
+  for(let i=0;i<N;i++){ const s=document.createElement('i'); pc.appendChild(s); sparkSpawn(s,i,N); }
+
+  // blink loop
+  const blink=()=>{ sparkEl.classList.add('blink'); setTimeout(()=>sparkEl.classList.remove('blink'),150);
+    sparkBlinkT=setTimeout(blink, 2600+Math.random()*3400); };
+  sparkBlinkT=setTimeout(blink, 2000);
+
+  // animated mouth waveform + scroll-reactive squash/tilt
+  requestAnimationFrame(sparkMouthLoop);
+  gsap.ticker.add(sparkScrollReact);
+}
+function sparkSpawn(node,i,N){
+  const seed=Math.random();
+  const fly=()=>{
+    const a=(i/N)*Math.PI*2 + (Math.random()-0.5)*1.2;
+    const d=64+Math.random()*78;
+    gsap.set(node,{x:0,y:0,scale:1,opacity:0});
+    gsap.to(node,{x:Math.cos(a)*d, y:Math.sin(a)*d, scale:0.3+Math.random()*0.4, opacity:0,
+      duration:1.3+Math.random()*1.4, ease:'power2.out',
+      keyframes:[{opacity:0,duration:0},{opacity:0.95,duration:0.25},{opacity:0,duration:0.6}],
+      onComplete:()=>setTimeout(fly, Math.random()*1600)});
+  };
+  setTimeout(fly, i*110 + seed*700);
+}
+function sparkMouthLoop(t){
+  if(sparkMouth){
+    if(sparkState==='answering' || sparkState==='listening'){
+      const amp=sparkState==='answering'?7:3, ph=t*0.014;
+      const y=(o)=>(84+Math.sin(ph+o)*amp).toFixed(1);
+      sparkMouth.setAttribute('d',`M40 84 Q47 ${y(0)} 54 84 T68 84 T82 84`.replace('T68',`Q61 ${y(1.4)} 68`).replace('T82',`Q75 ${y(2.7)} 82`));
+    } else {
+      sparkMouth.setAttribute('d','M44 84 Q60 90 76 84');
     }
-    orbRenderer.render(scene,camera);
-  })();
+  }
+  requestAnimationFrame(sparkMouthLoop);
+}
+function sparkScrollReact(){
+  if(!sparkEl) return;
+  const v=Math.max(-32,Math.min(32, window.__scrollVel||0));
+  sparkEl.style.setProperty('--tilt',(v*0.22).toFixed(2)+'deg');
+  sparkEl.style.setProperty('--sq',(1-Math.min(0.12,Math.abs(v)*0.0045)).toFixed(3));
 }
 function setOrbState(s){
-  orbState=s;
+  orbState=s; sparkState=s;
   const map={idle:'SPARK · IDLE',listening:'SPARK · LISTENING',thinking:'SPARK · THINKING',answering:'SPARK · ANSWERING'};
   const elS=document.getElementById('orbStatus'); if(elS) elS.textContent=map[s]||map.idle;
-  const bs=document.getElementById('botState'); if(bs) bs.textContent=(map[s]||map.idle).replace('SPARK','SPARK');
-  if(orbUniforms){
-    const c= s==='thinking'?0x8FD8FF : 0xC7FF3D;
-    orbUniforms.uColor.value.set(c);
+  const bs=document.getElementById('botState'); if(bs) bs.textContent=map[s]||map.idle;
+  if(sparkEl){
+    sparkEl.classList.remove('listening','thinking','answering');
+    if(s==='listening'||s==='thinking'||s==='answering') sparkEl.classList.add(s);
   }
 }
 
@@ -1245,7 +1347,7 @@ function buildRail(){
 }
 function setupScroll(){
   if(reduced){document.querySelectorAll('.reveal').forEach(r=>r.style.opacity=1);} else {
-    gsap.utils.toArray('.reveal:not(.sec-title):not(.contact-h)').forEach(r=>{
+    gsap.utils.toArray('.reveal:not(.sec-title):not(.contact-h):not(.mode-card):not(.dna-card):not(.case-row):not(.tl-item):not(.belief):not(.flow-card):not(.now-card):not(.sec-sub)').forEach(r=>{
       gsap.to(r,{opacity:1,y:0,duration:.9,ease:'power3.out',scrollTrigger:{trigger:r,start:'top 88%'}});
     });
     // evidence wall horizontal scroll
@@ -1573,19 +1675,84 @@ function scrollProgress(){
 
 
 /* ============================================================
-   V3 OPTIMIZATION PATCH — cleaner portfolio hero, no top nav clutter, smoother runtime
+   V4 — EXTREME SCROLL FX (every section reacts to scroll)
+   ============================================================ */
+function initScrollFX(){
+  const ease='power3.out';
+
+  // MODE CARDS — rise + 3D rotate, staggered
+  gsap.fromTo('#modes .mode-card',
+    {y:110,opacity:0,rotateX:-42,scale:.86,transformPerspective:1000,transformOrigin:'center bottom'},
+    {y:0,opacity:1,rotateX:0,scale:1,duration:1,ease,stagger:.12,
+     scrollTrigger:{trigger:'#modes',start:'top 74%'}});
+
+  // CASE ROWS — slide from alternating sides + number kick
+  gsap.utils.toArray('#cases .case-row').forEach((row,i)=>{
+    gsap.fromTo(row,{x:i%2?90:-90,opacity:0},
+      {x:0,opacity:1,duration:.95,ease,scrollTrigger:{trigger:row,start:'top 86%'}});
+    const num=row.querySelector('.num');
+    if(num) gsap.fromTo(num,{scale:0,rotate:-50,opacity:0},
+      {scale:1,rotate:0,opacity:1,duration:.85,ease:'back.out(2.2)',scrollTrigger:{trigger:row,start:'top 86%'}});
+  });
+
+  // DNA + LAB CARDS — random-stagger pop with rotation (per grid)
+  gsap.utils.toArray('.dna-grid').forEach(grid=>{
+    gsap.fromTo(grid.querySelectorAll('.dna-card'),
+      {y:70,opacity:0,scale:.82,rotate:()=>gsap.utils.random(-7,7)},
+      {y:0,opacity:1,scale:1,rotate:0,duration:.8,ease:'back.out(1.6)',stagger:{each:.07,from:'random'},
+       scrollTrigger:{trigger:grid,start:'top 82%'}});
+  });
+
+  // BELIEFS / FLOW / NOW — clean staggered rise
+  [['#beliefs','.belief'],['#flowGrid','.flow-card'],['#nowGrid','.now-card']].forEach(([wrap,sel])=>{
+    const c=document.querySelector(wrap); if(!c) return;
+    gsap.fromTo(c.querySelectorAll(sel),{y:60,opacity:0},
+      {y:0,opacity:1,duration:.85,ease,stagger:.08,scrollTrigger:{trigger:c,start:'top 84%'}});
+  });
+
+  // SECTION SUBHEADS
+  gsap.utils.toArray('.sec-sub').forEach(s=>gsap.fromTo(s,{y:28,opacity:0},
+    {y:0,opacity:1,duration:.8,ease,scrollTrigger:{trigger:s,start:'top 88%'}}));
+
+  // TIMELINE — items rise as the rail lights (lighting handled in setupScroll)
+  gsap.utils.toArray('.tl-item').forEach(it=>gsap.fromTo(it,{x:-40,opacity:0},
+    {x:0,opacity:1,duration:.8,ease,scrollTrigger:{trigger:it,start:'top 85%'}}));
+
+  // CONTACT — routes cascade in
+  gsap.fromTo('.contact-routes .route',{y:34,opacity:0},
+    {y:0,opacity:1,duration:.6,ease:'power2.out',stagger:.07,scrollTrigger:{trigger:'.contact-routes',start:'top 90%'}});
+
+  // SECTION TITLES drift (depth) — visibility owned by lineReveals
+  gsap.utils.toArray('.sec-title').forEach(t=>gsap.to(t,{yPercent:-10,ease:'none',
+    scrollTrigger:{trigger:t,start:'top bottom',end:'bottom top',scrub:1}}));
+
+  // EVIDENCE CARDS breathe as the wall scrolls horizontally
+  gsap.utils.toArray('.ev-card').forEach((c,i)=>gsap.fromTo(c,{opacity:0,y:40},
+    {opacity:1,y:0,duration:.7,ease,scrollTrigger:{trigger:'#evidence',start:'top 70%'},delay:i*0.05}));
+
+  // DOCK entrance on load (stays visible — it's primary nav)
+  gsap.from('#dock',{y:90,opacity:0,duration:.8,ease:'back.out(1.6)',delay:.35});
+}
+
+/* ============================================================
+   V4 ENHANCEMENT LAYER — interactive Spark + extreme scroll FX
    ============================================================ */
 function initEnhancements(){
   buildMarquee();
-  if(reduced){ document.querySelectorAll('.line-inner').forEach(l=>l.style.transform='none'); return; }
+  velocitySkew();
+  scrollProgress();
+  if(reduced){ document.querySelectorAll('.line-inner').forEach(l=>l.style.transform='none');
+    document.querySelectorAll('.reveal').forEach(r=>{r.style.opacity=1;r.style.transform='none';}); return; }
   splitTitles();
   lineReveals();
   scrambleEyebrows();
-  // Heavy hover/parallax/magnetic effects intentionally disabled for a smoother portfolio feel.
-  // Sections, content, ask overlay, orb, marquee, and bottom nav remain intact.
-  velocitySkew();
-  scrollProgress();
+  parallaxLayers();
+  mouseParallax();
+  initScrollFX();
+  if(!isTouch){ magneticTargets(); tiltCards(); }
   ScrollTrigger.refresh();
+  // re-measure after fonts/layout settle (keeps hero + pins accurate)
+  setTimeout(()=>ScrollTrigger.refresh(), 600);
 }
 
 setTimeout(()=>{const b=document.getElementById('boot');if(b&&b.style.display!=='none'&&getComputedStyle(b).opacity!=='0'){endBoot(true);}},5000);
