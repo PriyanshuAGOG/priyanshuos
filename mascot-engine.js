@@ -259,6 +259,9 @@
 
     function pickVariant(stateKey) {
       const arr = GESTURES[stateKey].variants;
+      // `pin` keeps one clip per gesture so we never fetch/decode a fresh
+      // variant on every trigger — that churn is what made roaming stutter.
+      if (options.pin) return arr[0];
       return arr[Math.floor(Math.random() * arr.length)];
     }
 
@@ -529,6 +532,9 @@
       trigger: triggerGesture,
       triggerRandom: triggerRandomReaction,
       goIdle: () => playState("idle", { speak: false }),
+      // Warm every gesture's pinned clip up front so switches are instant
+      // (no first-use fetch/decode hitch while the mascot is interacting).
+      preload: () => Object.keys(GESTURES).forEach((k) => loadVideo(GESTURES[k].variants[0])),
       setKeyThresholds,
       states: Object.keys(GESTURES),
       destroy,
