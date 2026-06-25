@@ -23,9 +23,9 @@
     listen: { label: "Listen", emoji: "👂", loop: true,  variants: ["listen_1", "listen_2", "listen_3", "listen_4", "listen_5", "listen_6"] },
     talk:   { label: "Talk",   emoji: "💬", loop: true,  variants: ["talk_1", "talk_2", "talk_3", "talk_4"] },
     groove: { label: "Groove", emoji: "🕺", loop: true,  variants: ["groove_1"] },
-    // Locomotion clip(s) — supplied separately. Drop walk_1.webm/.mp4 (and
-    // optionally walk_2..) into videos/ and the mascot uses it while moving.
-    walk:   { label: "Walk",   emoji: "🚶", loop: true,  variants: ["walk_1", "walk_2", "walk_3", "walk_4"] },
+    // Locomotion clip used while the mascot travels (green-screen, keyed live
+    // like the rest). Add more walk_N variants here if you ship them.
+    walk:   { label: "Walk",   emoji: "🚶", loop: true,  variants: ["walk_1"] },
   };
 
   const ONE_SHOT_STATES = new Set(["wave", "point"]);
