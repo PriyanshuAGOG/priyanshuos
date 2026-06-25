@@ -63,8 +63,12 @@
       float maxRB = max(r, b);
       float diff = g - maxRB;
 
-      float a = smoothstep(uLo, uHi, diff);
-      a = pow(a, 0.6);
+      // Derivative-based edge anti-aliasing: widen the key transition by the
+      // screen-space rate of change of diff so the silhouette stays smooth
+      // (no stair-stepping / pixelated rim) at any on-screen scale.
+      float aa = max(fwidth(diff), 0.0008) * 1.25;
+      float a = smoothstep(uLo - aa, uHi + aa, diff);
+      a = pow(a, 0.8); // gentler curve = softer, cleaner edge feather
       float alpha = 1.0 - a;
 
       float spillT = smoothstep(uLo * 0.1, uHi * 0.75, diff) * uSpillStrength;
@@ -191,10 +195,10 @@
 
     let lastW = 0, lastH = 0;
     function resizeCanvasToDisplaySize() {
-      // Cap device pixel ratio: a small mascot widget never needs full
-      // retina res for a 9:16 video texture — 1.5x is indistinguishable
-      // here and meaningfully cheaper to composite than 2-3x.
-      const dpr = Math.min(global.devicePixelRatio || 1, 1.5);
+      // Render at up to 2x so the keyed silhouette stays crisp when the
+      // free-roaming mascot is shown larger; still capped to avoid paying
+      // for 3x retina on a video texture that doesn't need it.
+      const dpr = Math.min(global.devicePixelRatio || 1, 2);
       const w = Math.max(1, Math.round(container.clientWidth * dpr));
       const h = Math.max(1, Math.round(container.clientHeight * dpr));
       if (w !== lastW || h !== lastH) {
