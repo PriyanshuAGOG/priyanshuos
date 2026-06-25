@@ -4,16 +4,18 @@
    This is Priyanshu's personal portfolio, so the mascot IS Priyanshu: it
    speaks in the first person and the visitor is effectively talking to him.
 
-   • No chrome — just the character and its speech. Tap the mascot to talk.
-   • Free-roaming: it walks (real walk-cycle), sits on components, thinks when
-     you pause on a section, and uses its whole gesture set.
-   • Voice: tap once to grant the mic, then it listens continuously for
-     "hi/hello Priyanshu" and holds a realtime conversation. Native path is
-     zero-delay; sttEndpoint/brainEndpoint/ttsEndpoint hooks allow a premium
-     swap later.
-
-   Performance: one pinned, preloaded clip per gesture (no per-trigger
-   fetch/decode churn) and the locomotion loop sleeps when nothing is moving.
+   SYSTEM
+   • Engine: WebGL2 chroma-key video mascot (mascot-engine.js), one pinned +
+     preloaded clip per gesture → instant, judder-free switches.
+   • Locomotion: time-based velocity (px/s) tuned to the walk clip's stride
+     cadence, with ease-in/out. Frame-rate independent. Sleeps when at rest.
+   • Choreographer: a per-section script. As you scroll, the mascot walks to a
+     real component in the active section and acts on it (sits on a card,
+     points at a button, thinks over a bug…), riding it as you scroll.
+   • Voice: tap the mascot to grant the mic, then it listens for
+     "hi/hello Priyanshu" and holds a realtime, first-person conversation.
+     Native path is zero-delay; sttEndpoint/brainEndpoint/ttsEndpoint hooks
+     allow a premium swap later.
    ========================================================================== */
 (function () {
   "use strict";
@@ -24,6 +26,9 @@
       sttEndpoint: null, brainEndpoint: null, ttsEndpoint: null,
       wakeWords: ["priyanshu", "preyanshu", "priyansh", "hey mascot"],
       sleepAfterMs: 30000,
+      walkCadence: 1.25,  // px/s per px of character height — close to the clip's
+                          // stride cadence, nudged slightly for screen responsiveness
+      sceneDwellMs: 650,  // how long the reader must settle before a scene fires
     },
     window.MASCOT_CONFIG || {}
   );
@@ -35,12 +40,13 @@
   const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  // word-boundary keyword test so "you" doesn't match "your", "ai" not "again"
+  const hasKw = (words, n, kw) => (kw.includes(" ") ? n.includes(kw) : words.has(kw));
 
   // ---------------------------------------------------------------- DOM (minimal)
   const root = el("div"); root.id = "mascot-root"; root.setAttribute("aria-live", "polite");
   const charEl = el("div", "m-char");
-  charEl.setAttribute("role", "button");
-  charEl.setAttribute("tabindex", "0");
+  charEl.setAttribute("role", "button"); charEl.setAttribute("tabindex", "0");
   charEl.setAttribute("aria-label", "Talk to Priyanshu");
   const canvasWrap = el("div", "m-canvaswrap");
   const veil = el("div", "m-veil", '<div class="m-spin"></div>');
@@ -62,81 +68,106 @@
     });
     mascot.ready.then(() => {
       veil.classList.add("hidden");
-      // warm the core gestures (walk is warmed only if its clip is found)
       if (mascot.preload) mascot.preload(["idle", "wave", "point", "sit", "think", "listen", "talk", "groove"]);
       probeWalk();
       startLife();
     });
   }
 
-  // ---------------------------------------------------------------- locomotion
+  // ---------------------------------------------------------------- locomotion (time-based)
   const pos = { x: 60, y: 60 }, target = { x: 60, y: 60 };
-  let facing = 1, perchEl = null, moving = false, charW = 130, charH = 188, raf = null;
-  // Real walk clip support: until videos/walk_1 exists we fake walking with a
-  // CSS walk-cycle on the idle clip; once it's there we play the real clip.
+  let facing = 1, perchEl = null, moving = false, perched = false;
+  let charW = 130, charH = 188, walkPxps = 170, curSpeed = 0, raf = null, lastT = 0;
+  let onArrive = null, pendingGesture = "idle";
+
   let hasWalk = false;
   async function probeWalk() {
     for (const ext of ["webm", "mp4"]) {
       try { const r = await fetch("videos/walk_1." + ext, { method: "HEAD" }); if (r.ok) { hasWalk = true; break; } } catch (_) {}
     }
-    if (hasWalk && mascot && mascot.preload) mascot.preload(["walk"]); // warm it for an instant first step
+    if (hasWalk && mascot && mascot.preload) mascot.preload(["walk"]);
   }
 
-  function measure() { const r = charEl.getBoundingClientRect(); if (r.width) { charW = r.width; charH = r.height; } }
+  function measure() {
+    const r = charEl.getBoundingClientRect();
+    if (r.width) { charW = r.width; charH = r.height; walkPxps = CFG.walkCadence * charH; }
+  }
   function groundY() { return window.innerHeight - charH * 0.98; }
   function perchPointFor(e) {
     const r = e.getBoundingClientRect();
     return {
-      x: clamp(r.left + Math.min(r.width * 0.5, 64) - charW / 2, 6, window.innerWidth - charW - 6),
+      x: clamp(r.left + Math.min(r.width * 0.5, 70) - charW / 2, 6, window.innerWidth - charW - 6),
       y: clamp(r.top - charH * 0.86, 6, window.innerHeight - charH - 6),
     };
   }
-  let pendingGesture = "idle";
-  function goTo(x, y, opts = {}) {
-    perchEl = opts.perch || null;
+  function besidePoint(e) {
+    const r = e.getBoundingClientRect();
+    const leftRoom = r.left > charW + 24;
+    const x = leftRoom ? r.left - charW * 0.82 : Math.min(r.right - charW * 0.18, window.innerWidth - charW - 6);
+    const y = clamp(r.bottom - charH * 0.96, 6, window.innerHeight - charH - 6);
+    return { x: clamp(x, 6, window.innerWidth - charW - 6), y };
+  }
+
+  function moveTo(x, y, opts = {}) {
     target.x = clamp(x, 4, window.innerWidth - charW - 4);
     target.y = clamp(y, 4, window.innerHeight - charH - 4);
+    perchEl = opts.perch || null;
+    perched = false;
     pendingGesture = opts.gesture || "idle";
+    onArrive = opts.onArrive || null;
     ensureTick();
   }
-  function ensureTick() { if (!raf) raf = requestAnimationFrame(tick); }
+  function ensureTick() { if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(tick); } }
 
-  function tick() {
+  function tick(now) {
+    const dt = Math.min(0.05, (now - lastT) / 1000) || 0.016; lastT = now;
+
+    // ride a perched component as the page scrolls (stay glued unless it bolts)
     if (perchEl) {
-      if (!document.contains(perchEl)) perchEl = null;
+      if (!document.contains(perchEl)) { perchEl = null; perched = false; }
       else { const p = perchPointFor(perchEl); target.x = p.x; target.y = p.y; }
     }
+
     const dx = target.x - pos.x, dy = target.y - pos.y, dist = Math.hypot(dx, dy);
+    const stopR = 5;
     let lean = 0;
 
-    if (dist > 1.2) {
-      const speed = clamp(dist * 0.085, 1.1, 7); // gentle ease-out, slow enough to read as walking
-      pos.x += (dx / dist) * Math.min(speed, dist);
-      pos.y += (dy / dist) * Math.min(speed, dist);
-      if (dist > 18) {
-        // Use the real walk clip if present; otherwise idle + CSS walk-cycle.
+    if (perched && dist < 90) {
+      // glued to the component — snap so it never micro-shuffles while reading
+      pos.x = target.x; pos.y = target.y; curSpeed = 0;
+    } else if (dist > stopR) {
+      const wantSpeed = walkPxps;
+      curSpeed += (wantSpeed - curSpeed) * Math.min(1, dt * 7); // ease in/out
+      const step = Math.min(curSpeed * dt, dist);
+      pos.x += (dx / dist) * step; pos.y += (dy / dist) * step;
+
+      const fastEnough = curSpeed > walkPxps * 0.2;
+      if (fastEnough) {
         if (!moving) { moving = true; charEl.classList.toggle("walking", !hasWalk); }
         charEl.classList.toggle("is-air", target.y < groundY() - 30);
         if (!convoActive) setGesture(hasWalk ? "walk" : "idle");
-        if (Math.abs(dx) > 1.5) {
-          const dir = dx > 0 ? 1 : -1; // 1 = travelling right, -1 = left
-          // the walk clip is authored facing LEFT, so flip it to face travel.
+        if (Math.abs(dx) > 1.2) {
+          const dir = dx > 0 ? 1 : -1;                 // clip is authored facing LEFT
           facing = hasWalk ? (dir === 1 ? -1 : 1) : dir;
           lean = hasWalk ? 0 : dir * 2;
         }
       }
-    } else if (moving) {
-      moving = false; pos.x = target.x; pos.y = target.y;
-      charEl.classList.remove("walking");
-      facing = 1; // settle facing the visitor (idle/talk clips are front-on)
-      if (!convoActive) setGesture(pendingGesture);
+    } else {
+      // arrived
+      pos.x = target.x; pos.y = target.y; curSpeed = 0;
+      if (moving) {
+        moving = false; charEl.classList.remove("walking"); facing = 1;
+        if (!convoActive) setGesture(pendingGesture);
+        if (perchEl) perched = true;
+        const cb = onArrive; onArrive = null; if (cb) try { cb(); } catch (e) { console.warn(e); }
+      }
     }
 
     charEl.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0) rotate(${lean}deg) scaleX(${facing})`;
     positionBubble();
 
-    // keep ticking only while there's something to animate (saves CPU at rest)
-    if (moving || dist > 1.2) raf = requestAnimationFrame(tick);
+    const busyMoving = dist > stopR && !(perched && dist < 90);
+    if (busyMoving || curSpeed > 1) raf = requestAnimationFrame(tick);
     else raf = null;
   }
 
@@ -146,37 +177,88 @@
     bubble.style.transform = `translate(${bx}px, ${by}px) translate(-50%,-100%)`;
   }
 
-  // ---------------------------------------------------------------- ambient behaviour
-  const PERCH_SEL = ".case, .node, .fcard, .bug, .col, .route-node, h2, .stamp";
-  let wanderTimer = null, scrollStopTimer = null;
+  // ---------------------------------------------------------------- CHOREOGRAPHER
+  // Each section gets a beat: a real component to act on + a gesture + a line.
+  const SCENES = {
+    home:    { sel: "[data-ask], .btn.primary", place: "beside", gesture: "point", line: "Hey — I'm Priyanshu. Tap me and let's actually talk." },
+    brain:   { sel: "#brainGrid .node",         place: "on",     gesture: "sit",   line: "This is how I think — I turn chaos into systems." },
+    work:    { sel: "#cases .case",             place: "on",     gesture: "sit",   line: "Real things I built, broke, and fixed. Open one." },
+    broke:   { sel: "#bugs .bug",               place: "on",     gesture: "think", line: "I don't hide what broke — that's the proof I learned." },
+    story:   { sel: "#routeNodes .route-node",  place: "on",     gesture: "sit",   line: "I took the path where I could build the most." },
+    ai:      { sel: "#ai h2, #ai .eyebrow",     place: "on",     gesture: "think", line: "AI is my leverage — not my identity." },
+    now:     { sel: "#board .col",              place: "on",     gesture: "point", line: "Here's what I'm building right now." },
+    contact: { sel: "#signalForm [type=submit], #signalForm", place: "beside", gesture: "wave", line: "Got chaos that needs a system? Send me a signal." },
+  };
+  const SECTION_IDS = Object.keys(SCENES);
+  const shownLines = new Set();
+  let activeId = null, lastSceneId = null, scrollSettle = null, scrolling = false;
 
-  function perchCandidate() {
-    const inView = Array.from(document.querySelectorAll(PERCH_SEL)).filter((e) => {
-      const r = e.getBoundingClientRect();
-      return r.top > 40 && r.top < window.innerHeight * 0.7 && r.width > 60;
-    });
+  function visibleAmount(elm) {
+    const r = elm.getBoundingClientRect();
+    const vh = window.innerHeight;
+    return Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+  }
+  function activeSection() {
+    let best = null, bestV = 0;
+    for (const id of SECTION_IDS) {
+      const s = document.getElementById(id); if (!s) continue;
+      const v = visibleAmount(s);
+      if (v > bestV) { bestV = v; best = id; }
+    }
+    return best;
+  }
+  function resolveTarget(scene) {
+    const all = Array.from(document.querySelectorAll(scene.sel));
+    const vh = window.innerHeight;
+    const inView = all.filter((e) => { const r = e.getBoundingClientRect(); return r.top > 30 && r.bottom < vh - 10 && r.width > 40; });
     if (!inView.length) return null;
-    inView.sort((a, b) => Math.abs(a.getBoundingClientRect().top - window.innerHeight * 0.32) -
-                          Math.abs(b.getBoundingClientRect().top - window.innerHeight * 0.32));
-    return inView[Math.floor(Math.random() * Math.min(3, inView.length))];
-  }
-  function onSettle() {
-    if (convoActive || reduce) return;
-    const c = perchCandidate();
-    if (c) { const p = perchPointFor(c); goTo(p.x, p.y, { perch: c, gesture: pick(["sit", "think", "point", "listen", "sit", "think"]) }); }
-    else goTo(clamp(pos.x, 40, window.innerWidth - charW - 40), groundY(), { gesture: "idle" });
-  }
-  function wander() {
-    clearTimeout(wanderTimer);
-    if (reduce) return;
-    wanderTimer = setTimeout(() => {
-      if (!convoActive && !moving && !perchEl) {
-        goTo(40 + Math.random() * (window.innerWidth - charW - 80), groundY(), { gesture: Math.random() < 0.25 ? "groove" : "idle" });
-      }
-      wander();
-    }, 11000 + Math.random() * 8000);
+    inView.sort((a, b) => Math.abs(a.getBoundingClientRect().top - vh * 0.34) - Math.abs(b.getBoundingClientRect().top - vh * 0.34));
+    return inView[0];
   }
 
+  function runScene(id, force) {
+    if (convoActive || reduce || !id) return;
+    const scene = SCENES[id];
+    if (!scene) { idleNearSection(id); return; }
+    if (id === lastSceneId && !force && perched) return; // already settled here
+    lastSceneId = id;
+
+    const tEl = resolveTarget(scene);
+    const showLine = () => {
+      if (shownLines.has(id)) return;
+      shownLines.add(id);
+      showBubble({ text: scene.line, sticky: false });
+    };
+
+    if (tEl) {
+      const p = scene.place === "on" ? perchPointFor(tEl) : besidePoint(tEl);
+      moveTo(p.x, p.y, { perch: scene.place === "on" ? tEl : null, gesture: scene.gesture, onArrive: showLine });
+    } else {
+      // no component in view — stand near the section and do the gesture in place
+      const s = document.getElementById(id); const r = s ? s.getBoundingClientRect() : null;
+      const x = r ? clamp(r.left + r.width * 0.5 - charW / 2, 30, window.innerWidth - charW - 30) : pos.x;
+      moveTo(x, groundY(), { gesture: scene.gesture, onArrive: showLine });
+    }
+  }
+  function idleNearSection() { moveTo(clamp(pos.x, 40, window.innerWidth - charW - 40), groundY(), { gesture: "idle" }); }
+
+  // gentle idle fidget if the reader lingers in one spot
+  let fidgetTimer = null;
+  function armFidget() {
+    clearTimeout(fidgetTimer);
+    if (reduce) return;
+    fidgetTimer = setTimeout(() => {
+      if (!convoActive && !moving && !scrolling) {
+        const g = pick(["point", "think", "wave", "groove", "listen"]);
+        const back = gesture;
+        setGesture(g);
+        setTimeout(() => { if (!convoActive && !moving) setGesture(back === "walk" ? "idle" : back); }, 2600);
+      }
+      armFidget();
+    }, 16000 + Math.random() * 9000);
+  }
+
+  // ---------------------------------------------------------------- life cycle
   function startLife() {
     measure();
     pos.x = clamp(window.innerWidth - 190, 20, window.innerWidth - charW - 20);
@@ -185,36 +267,39 @@
     if (reduce) { setGesture("idle"); return; }
 
     setTimeout(() => setGesture("wave"), 700);
-    setTimeout(() => say("Hey — I'm Priyanshu. Tap me and let's talk; I'll walk you through what I've built.", { gesture: "talk" }), 1400);
+    setTimeout(() => { showBubble({ text: "Hey — I'm Priyanshu. Scroll around; I'll walk you through it. Tap me to talk.", sticky: false }); }, 1300);
 
-    window.addEventListener("scroll", () => {
-      perchEl = null;
-      if (!convoActive && !moving) setGesture("idle");
-      ensureTick();
-      clearTimeout(scrollStopTimer);
-      scrollStopTimer = setTimeout(onSettle, 950);
-    }, { passive: true });
-
-    wander();
-    setTimeout(onSettle, 3000);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+    armFidget();
+    setTimeout(() => { activeId = activeSection(); runScene(activeId, true); }, 2600);
   }
 
-  window.addEventListener("resize", () => {
+  function onScroll() {
+    if (convoActive) return;
+    if (perchEl) { perchEl = null; perched = false; if (!moving) setGesture("idle"); } // detach while scrolling
+    scrolling = true;
+    clearTimeout(scrollSettle);
+    scrollSettle = setTimeout(() => {
+      scrolling = false;
+      const id = activeSection();
+      if (id) { activeId = id; runScene(id); }
+    }, CFG.sceneDwellMs);
+    armFidget();
+  }
+  function onResize() {
     measure();
     pos.x = clamp(pos.x, 4, window.innerWidth - charW - 4);
     pos.y = clamp(pos.y, 4, window.innerHeight - charH - 4);
     ensureTick();
-  });
+  }
 
   charEl.addEventListener("mouseenter", () => { if (!convoActive && !moving) setGesture("point"); });
-  charEl.addEventListener("mouseleave", () => { if (!convoActive && !moving && gesture === "point") setGesture("idle"); });
+  charEl.addEventListener("mouseleave", () => { if (!convoActive && !moving && gesture === "point") setGesture(perched ? lastSceneGesture() : "idle"); });
   charEl.addEventListener("click", onMascotTap);
   charEl.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onMascotTap(); } });
-
-  function onMascotTap() {
-    if (!micEnabled && SR) { enableMic(); return; }    // first tap grants the mic, then wakes
-    if (!convoActive) wakeUp(); else startListening();
-  }
+  function lastSceneGesture() { const s = SCENES[lastSceneId]; return s ? s.gesture : "idle"; }
+  function onMascotTap() { if (!micEnabled && SR) { enableMic(); return; } if (!convoActive) wakeUp(); else startListening(); }
 
   // ---------------------------------------------------------------- bubble
   let bubbleT = null;
@@ -243,9 +328,8 @@
     "I'm a builder who turns chaos into systems — apps, AI workflows, founder-office ops. " +
     "Ask me anything: what I've built, what broke, or how I use AI.";
 
-  // first-person knowledge base — keyword-scored
   const KB = [
-    { k: ["who", "you", "yourself", "about you", "introduce", "tell me about"], a: "I'm Priyanshu — a builder-operator from Jaipur. I work across apps, websites, AI workflows, founder-office systems and community ops. My one rule: turn chaos into systems, and back what I say with proof.", s: "→ that's me, honestly", g: "talk" },
+    { k: ["who", "yourself", "about you", "introduce", "tell me about"], a: "I'm Priyanshu — a builder-operator from Jaipur. I work across apps, websites, AI workflows, founder-office systems and community ops. My one rule: turn chaos into systems, and back what I say with proof.", s: "→ that's me, honestly", g: "talk" },
     { k: ["built", "build", "made", "projects", "work", "shipped", "portfolio"], a: "I've built Student Social — a full app with pods, chat and feeds; the Nirog Bhumi founder-office systems; hackathon platforms; an AI QA workflow; and client sites on WordPress, WooCommerce and Next.js.", s: "→ open any case file to inspect it", g: "point" },
     { k: ["technical", "real", "just ai", "developer", "code", "coding", "engineer"], a: "I'm technical — I build with Next.js, React, Appwrite and WordPress, and I ship real apps. AI is my leverage for speed and first drafts, but direction, taste and what ships are my calls.", s: "→ see my AI workflow", g: "think" },
     { k: ["stack", "tech", "technologies", "tools", "languages", "framework"], a: "My stack is Next.js, React, TypeScript, Tailwind, Appwrite, WordPress, WooCommerce and the Shopify API — plus AI tooling running inside a QA loop.", s: "→ stacks are on each case file", g: "point" },
@@ -261,6 +345,7 @@
 
   function localBrain(text) {
     const n = norm(text);
+    const words = new Set(n.split(" "));
     if (/\b(stop|quiet|shush|enough)\b/.test(n)) { stopSpeaking(); return { spoken: "Alright, I'll pause.", g: "idle" }; }
     if (/\b(bye|goodbye|sleep|that s all|thats all|see you)\b/.test(n)) { goToSleep(); return { spoken: "Catch you later — I'll be around the page.", g: "wave" }; }
     if (/\b(thanks|thank you|cool|nice|awesome|great|love it)\b/.test(n)) return { spoken: pick(["Anytime!", "Glad that helped.", "Appreciate it."]), g: "wave" };
@@ -271,12 +356,11 @@
     const mode = MODES.find((m) => n.includes(m));
     if (mode && /\b(mode|switch|turn|go)\b/.test(n)) return { spoken: `Sure — switching to ${mode} mode.`, s: "→ accent + framing updated", g: "point", action: () => window.setMode && window.setMode(mode) };
     if (/\b(open|go|scroll|show|take me|navigate|jump|see)\b/.test(n)) {
-      for (const key in SECTIONS) if (n.includes(key)) { const id = SECTIONS[key]; return { spoken: `Taking you to ${key}.`, s: "→ scrolling", g: "point", action: () => { const t = document.getElementById(id); if (t) t.scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); } }; }
+      for (const key in SECTIONS) if (hasKw(words, n, key)) { const id = SECTIONS[key]; return { spoken: `Taking you to ${key}.`, s: "→ scrolling", g: "point", action: () => { const t = document.getElementById(id); if (t) t.scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); } }; }
     }
 
-    // score the knowledge base
     let best = null, score = 0;
-    for (const item of KB) { let s = 0; for (const kw of item.k) if (n.includes(kw)) s += kw.includes(" ") ? 2 : 1; if (s > score) { score = s; best = item; } }
+    for (const item of KB) { let s = 0; for (const kw of item.k) if (hasKw(words, n, kw)) s += kw.includes(" ") ? 2 : 1; if (s > score) { score = s; best = item; } }
     if (best && score >= 1) return { spoken: best.a, s: best.s, g: best.g, action: best.action };
     return { spoken: "Good question — I don't have that exact context yet, but ask me about Student Social, Nirog Bhumi, my AI workflow, my stack, my failures, or what I'm building now.", s: "→ honest by default, no fake metrics", g: "talk" };
   }
@@ -357,34 +441,29 @@
   function pauseRecognition() { recogPaused = true; if (recog && recogRunning) { try { recog.stop(); } catch (_) {} } }
   function resumeRecognition() { recogPaused = false; if (micEnabled) startRecognition(); }
   function startListening() { if (!micEnabled) { enableMic(); return; } resumeRecognition(); if (convoActive && !speaking) setGesture("listen"); }
-  function enableMic() {
-    if (!SR) { wakeUp(); openType(); return; }
-    micEnabled = true; charEl.classList.add("is-live"); startRecognition();
-    wakeUp();
-  }
+  function enableMic() { if (!SR) { wakeUp(); openType(); return; } micEnabled = true; charEl.classList.add("is-live"); startRecognition(); wakeUp(); }
 
   // ---------------------------------------------------------------- conversation
   let convoActive = false, sleepTimer = null, busy = false;
   function conversationSpot() { return { x: clamp(window.innerWidth - charW - 30, 20, window.innerWidth - charW - 8), y: groundY() }; }
   function armSleep() { clearTimeout(sleepTimer); sleepTimer = setTimeout(goToSleep, CFG.sleepAfterMs); }
-  function goToSleep() { if (!convoActive) return; convoActive = false; clearTimeout(sleepTimer); facing = 1; charEl.classList.toggle("is-live", micEnabled); setGesture("idle"); onSettle(); wander(); }
-
+  function goToSleep() {
+    if (!convoActive) return;
+    convoActive = false; clearTimeout(sleepTimer); facing = 1;
+    charEl.classList.toggle("is-live", micEnabled); setGesture("idle");
+    lastSceneId = null; runScene(activeSection(), true); armFidget();
+  }
   function wakeUp() {
-    clearTimeout(wanderTimer);
-    convoActive = true; perchEl = null;
+    clearTimeout(fidgetTimer);
+    convoActive = true; perchEl = null; perched = false;
     const spot = conversationSpot();
-    facing = 1; moving = true; target.x = spot.x; target.y = spot.y; ensureTick();
-    const arrive = setInterval(() => {
-      if (Math.hypot(target.x - pos.x, target.y - pos.y) < 4) {
-        clearInterval(arrive); setGesture("wave");
-        setTimeout(() => say(INTRO, { gesture: "talk", source: "→ ask me anything, or say “open work”" }), 700);
-      }
-    }, 80);
-    setTimeout(() => { if (convoActive && gesture !== "talk" && gesture !== "wave") { setGesture("wave"); say(INTRO, { gesture: "talk" }); } }, 1800);
+    moveTo(spot.x, spot.y, { gesture: "wave", onArrive: () => {
+      setGesture("wave");
+      setTimeout(() => say(INTRO, { gesture: "talk", source: "→ ask me anything, or say “open work”" }), 650);
+    } });
     armSleep();
     if (micEnabled) resumeRecognition();
   }
-
   async function handleUtterance(text) {
     if (!text || busy) return;
     const n = norm(text);
@@ -396,7 +475,6 @@
     say(r.spoken, { you: text, source: r.s, gesture: r.g || "talk" });
     busy = false;
   }
-
   function openType() { const q = window.prompt("Ask Priyanshu:"); if (q && q.trim()) { if (!convoActive) wakeUp(); setTimeout(() => handleUtterance(q.trim()), convoActive ? 0 : 1900); } }
 
   document.addEventListener("visibilitychange", () => { if (document.hidden) { stopSpeaking(); pauseRecognition(); } else if (micEnabled) resumeRecognition(); });
@@ -404,6 +482,6 @@
   window.PriyanshuMascot = {
     ask: (t) => { if (!convoActive) wakeUp(); setTimeout(() => handleUtterance(t), convoActive ? 0 : 1800); },
     say, wake: wakeUp, sleep: goToSleep, enableMic, gesture: setGesture, config: CFG,
-    state: () => gesture, hasWalk: () => hasWalk,
+    state: () => gesture, hasWalk: () => hasWalk, scene: (id) => runScene(id, true),
   };
 })();
