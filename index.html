@@ -346,6 +346,7 @@ footer .sig{color:var(--accent);font-size:14px;letter-spacing:.04em;margin-botto
   #spine,#bgfx,#cur,#curd,#curlabel{display:none}#dock{opacity:1;transform:translateX(-50%)}
 }
 </style>
+<link rel="stylesheet" href="mascot.css">
 </head>
 <body class="lock mode-builder">
 
@@ -826,5 +827,9 @@ addEventListener('keydown',e=>{
 $$('[data-go]').forEach(b=>b.addEventListener('click',()=>{const t=$('#'+b.dataset.go);if(t)t.scrollIntoView({behavior:reduce?'auto':'smooth'});}));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)layoutAll();});
 </script>
+
+<!-- Interactive talking mascot + hybrid realtime voice engine -->
+<script src="mascot-engine.js"></script>
+<script src="mascot.js" defer></script>
 </body>
 </html>
