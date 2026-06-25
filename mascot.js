@@ -62,7 +62,9 @@
     });
     mascot.ready.then(() => {
       veil.classList.add("hidden");
-      if (mascot.preload) mascot.preload(); // warm all gestures for instant, judder-free switches
+      // warm the core gestures (walk is warmed only if its clip is found)
+      if (mascot.preload) mascot.preload(["idle", "wave", "point", "sit", "think", "listen", "talk", "groove"]);
+      probeWalk();
       startLife();
     });
   }
@@ -70,6 +72,15 @@
   // ---------------------------------------------------------------- locomotion
   const pos = { x: 60, y: 60 }, target = { x: 60, y: 60 };
   let facing = 1, perchEl = null, moving = false, charW = 130, charH = 188, raf = null;
+  // Real walk clip support: until videos/walk_1 exists we fake walking with a
+  // CSS walk-cycle on the idle clip; once it's there we play the real clip.
+  let hasWalk = false;
+  async function probeWalk() {
+    for (const ext of ["webm", "mp4"]) {
+      try { const r = await fetch("videos/walk_1." + ext, { method: "HEAD" }); if (r.ok) { hasWalk = true; break; } } catch (_) {}
+    }
+    if (hasWalk && mascot && mascot.preload) mascot.preload(["walk"]); // warm it for an instant first step
+  }
 
   function measure() { const r = charEl.getBoundingClientRect(); if (r.width) { charW = r.width; charH = r.height; } }
   function groundY() { return window.innerHeight - charH * 0.98; }
@@ -104,10 +115,11 @@
       pos.y += (dy / dist) * Math.min(speed, dist);
       if (Math.abs(dx) > 1.5) facing = dx > 0 ? 1 : -1;
       if (dist > 18) {
-        if (!moving) { moving = true; charEl.classList.add("walking"); }
+        // Use the real walk clip if present; otherwise idle + CSS walk-cycle.
+        if (!moving) { moving = true; charEl.classList.toggle("walking", !hasWalk); }
         charEl.classList.toggle("is-air", target.y < groundY() - 30);
-        if (!convoActive) setGesture("idle"); // idle clip + CSS walk-cycle = walking
-        lean = facing * 2;
+        if (!convoActive) setGesture(hasWalk ? "walk" : "idle");
+        lean = facing * (hasWalk ? 1 : 2);
       }
     } else if (moving) {
       moving = false; pos.x = target.x; pos.y = target.y;
