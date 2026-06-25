@@ -6,7 +6,7 @@
 
    SYSTEM
    • Engine: WebGL2 chroma-key video mascot (mascot-engine.js), one pinned +
-     preloaded clip per gesture → instant, judder-free switches.
+     lazily warmed clip per gesture → smooth switches without startup spikes.
    • Locomotion: time-based velocity (px/s) tuned to the walk clip's stride
      cadence, with ease-in/out. Frame-rate independent. Sleeps when at rest.
    • Choreographer: a per-section script. As you scroll, the mascot walks to a
@@ -63,14 +63,24 @@
     console.error("[mascot] mascot-engine.js not loaded"); veil.classList.add("hidden");
   } else {
     mascot = window.MascotEngine.createMascot(canvasWrap, {
-      videoBase: "videos/", pin: true, ambient: false, spontaneous: false, fx: false,
+      videoBase: "assets/videos/", pin: true, ambient: false, spontaneous: false, fx: false,
       onStateChange: () => {}, onSpeech: () => {},
     });
     mascot.ready.then(() => {
       veil.classList.add("hidden");
-      if (mascot.preload) mascot.preload(["idle", "wave", "point", "sit", "think", "listen", "talk", "groove"]);
+      warmMascotClips();
       probeWalk();
       startLife();
+    });
+  }
+
+
+  function warmMascotClips() {
+    if (!mascot || !mascot.preload) return;
+    const warm = ["wave", "point", "sit", "think", "listen", "talk", "groove"];
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1));
+    warm.forEach((gestureName, i) => {
+      setTimeout(() => idle(() => mascot.preload([gestureName])), 350 + i * 650);
     });
   }
 
@@ -83,7 +93,7 @@
   let hasWalk = false;
   async function probeWalk() {
     for (const ext of ["webm", "mp4"]) {
-      try { const r = await fetch("videos/walk_1." + ext, { method: "HEAD" }); if (r.ok) { hasWalk = true; break; } } catch (_) {}
+      try { const r = await fetch("assets/videos/walk_1." + ext, { method: "HEAD" }); if (r.ok) { hasWalk = true; break; } } catch (_) {}
     }
     if (hasWalk && mascot && mascot.preload) mascot.preload(["walk"]);
   }

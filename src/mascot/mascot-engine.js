@@ -103,7 +103,7 @@
    * Mount an interactive mascot into `container`.
    * @param {HTMLElement} container - element to mount canvas + UI hooks into
    * @param {Object} opts
-   *   videoBase: string path to the videos/ folder (default "videos/")
+   *   videoBase: string path to the mascot videos folder (default "assets/videos/")
    *   autoIdle: bool - start playing idle immediately on mount (default true)
    *   ambient: bool - cycle idle variants periodically (default true, off if reduced-motion)
    *   spontaneous: bool - attention-seeking after quiet period (default true, off if reduced-motion)
@@ -114,7 +114,7 @@
   function createMascot(container, opts = {}) {
     const reduced = prefersReducedMotion();
     const options = Object.assign({
-      videoBase: "videos/",
+      videoBase: "assets/videos/",
       autoIdle: true,
       ambient: !reduced,
       spontaneous: !reduced,
