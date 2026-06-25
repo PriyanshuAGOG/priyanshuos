@@ -113,17 +113,22 @@
       const speed = clamp(dist * 0.085, 1.1, 7); // gentle ease-out, slow enough to read as walking
       pos.x += (dx / dist) * Math.min(speed, dist);
       pos.y += (dy / dist) * Math.min(speed, dist);
-      if (Math.abs(dx) > 1.5) facing = dx > 0 ? 1 : -1;
       if (dist > 18) {
         // Use the real walk clip if present; otherwise idle + CSS walk-cycle.
         if (!moving) { moving = true; charEl.classList.toggle("walking", !hasWalk); }
         charEl.classList.toggle("is-air", target.y < groundY() - 30);
         if (!convoActive) setGesture(hasWalk ? "walk" : "idle");
-        lean = facing * (hasWalk ? 1 : 2);
+        if (Math.abs(dx) > 1.5) {
+          const dir = dx > 0 ? 1 : -1; // 1 = travelling right, -1 = left
+          // the walk clip is authored facing LEFT, so flip it to face travel.
+          facing = hasWalk ? (dir === 1 ? -1 : 1) : dir;
+          lean = hasWalk ? 0 : dir * 2;
+        }
       }
     } else if (moving) {
       moving = false; pos.x = target.x; pos.y = target.y;
       charEl.classList.remove("walking");
+      facing = 1; // settle facing the visitor (idle/talk clips are front-on)
       if (!convoActive) setGesture(pendingGesture);
     }
 
@@ -399,5 +404,6 @@
   window.PriyanshuMascot = {
     ask: (t) => { if (!convoActive) wakeUp(); setTimeout(() => handleUtterance(t), convoActive ? 0 : 1800); },
     say, wake: wakeUp, sleep: goToSleep, enableMic, gesture: setGesture, config: CFG,
+    state: () => gesture, hasWalk: () => hasWalk,
   };
 })();
