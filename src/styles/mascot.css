@@ -68,6 +68,8 @@
   backdrop-filter:blur(8px); transition:opacity .2s, color .2s, border-color .2s, background .2s;
 }
 .m-char:hover .m-voice-status,.m-char.is-live .m-voice-status{opacity:1}
+/* seamless mode: no plumbing words — the listening ring carries the state */
+.m-voice-status--silent{display:none !important}
 .m-voice-status::before{content:""; display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:6px; background:currentColor}
 .m-voice-status[data-tone="busy"]{color:#FFD166; border-color:rgba(255,209,102,.35)}
 .m-voice-status[data-tone="live"]{color:var(--m-accent); border-color:color-mix(in srgb,var(--m-accent),transparent 58%); background:rgba(13,22,16,.88)}
