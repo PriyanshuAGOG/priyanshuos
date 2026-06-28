@@ -278,13 +278,42 @@
     charEl.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0) scaleX(1)`;
     if (reduce) { setGesture("idle"); return; }
 
-    setTimeout(() => setGesture("wave"), 700);
-    setTimeout(() => { showBubble({ text: "Hey — I'm Priyanshu. Scroll around; I'll walk you through it. Tap me to talk.", sticky: false }); }, 1300);
+    // Instant greeting — wave + welcome the moment the page is alive (no
+    // permission needed, zero latency).
+    setTimeout(() => setGesture("wave"), 500);
+    setTimeout(() => { showBubble({ text: "Heyo! Welcome to Priyanshu OS — I'm Priyanshu. Talk to me, or look around.", sticky: false }); }, 1000);
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onResize);
     armFidget();
+    armVoiceAutostart();
     setTimeout(() => { activeId = activeSection(); runScene(activeId, true); }, 2600);
+  }
+
+  // The ElevenLabs voice agent needs a real user gesture before the browser
+  // will grant the mic / unlock audio — so we can't legally open it on raw page
+  // load. Instead we arm it to fire on the *first* interaction (tap, key, or
+  // touch), which is the earliest allowed moment. If the voice SDK bridge isn't
+  // mounted yet, we remember the intent and start the instant it's ready.
+  let voiceAutostartArmed = false, voiceAutostartDone = false, voiceAutostartPending = false;
+  function armVoiceAutostart() {
+    if (voiceAutostartArmed || reduce || CFG.autostartVoice === false) return;
+    voiceAutostartArmed = true;
+    const fire = () => {
+      if (voiceAutostartDone) return;
+      voiceAutostartDone = true;
+      window.removeEventListener("pointerdown", fire, true);
+      window.removeEventListener("keydown", fire, true);
+      window.removeEventListener("touchstart", fire, true);
+      tryStartVoice();
+    };
+    window.addEventListener("pointerdown", fire, true);
+    window.addEventListener("keydown", fire, true);
+    window.addEventListener("touchstart", fire, true);
+  }
+  function tryStartVoice() {
+    if (window.ElevenLabsMascotBridge) startElevenLabsConversation();
+    else voiceAutostartPending = true; // bridge not mounted yet — start on ready
   }
 
   function onScroll() {
@@ -531,8 +560,11 @@
     say, wake: wakeUp, sleep: goToSleep, enableMic, gesture: setGesture, config: CFG,
     state: () => gesture, hasWalk: () => hasWalk, scene: (id) => runScene(id, true),
     elevenlabs: {
+      // Fired by the voice bridge once it has mounted and the SDK is ready. If
+      // the visitor already interacted before that, kick off the conversation.
+      onBridgeReady: () => { if (voiceAutostartPending) { voiceAutostartPending = false; startElevenLabsConversation(); } },
       onStarting: () => { convoActive = true; charEl.classList.add("is-live"); setGesture("listen"); setVoiceStatus("Connecting…", "busy"); showBubble({ text: "Asking for mic access…", source: "→ PriyanshuOS voice", sticky: true }); },
-      onConnect: () => { convoActive = true; charEl.classList.add("is-live"); setGesture("listen"); setVoiceStatus("Listening", "live"); showBubble({ text: "You're connected — talk to me naturally.", source: "→ ElevenLabs agent: PriyanshuOS", sticky: false }); },
+      onConnect: () => { convoActive = true; charEl.classList.add("is-live"); setGesture("wave"); setVoiceStatus("Live", "live"); showBubble({ text: "Heyo! Welcome to Priyanshu OS — talk to me naturally.", source: "→ ElevenLabs agent: PriyanshuOS", sticky: false }); },
       onDisconnect: () => { charEl.classList.remove("is-live"); convoActive = false; clearTimeout(sleepTimer); if (!moving) setGesture("idle"); setVoiceStatus("Voice ready", "idle"); showBubble({ text: "Voice chat ended. Tap me whenever you want to talk again.", source: "→ disconnected", sticky: false }); armFidget(); },
       onSpeakingChange: (isSpeaking) => { if (!convoActive) return; setVoiceStatus(isSpeaking ? "Speaking" : "Listening", "live"); if (!moving) setGesture(isSpeaking ? "talk" : "listen"); },
       onModeChange: (mode) => { if (mode && mode.mode) { setVoiceStatus(mode.mode === "speaking" ? "Speaking" : "Listening", "live"); setGesture(mode.mode === "speaking" ? "talk" : "listen"); } },
