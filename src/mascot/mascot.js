@@ -26,8 +26,15 @@
       sttEndpoint: null, brainEndpoint: null, ttsEndpoint: null,
       wakeWords: ["priyanshu", "preyanshu", "priyansh", "hey priyanshu", "hi priyanshu", "hello priyanshu", "hey mascot"],
       sleepAfterMs: 30000,
-      restAfterMs: 2800,            // user-silence in a live call before we rest the agent
+      // Two-tier rest so we never cut off a real conversation: after the opening
+      // greeting with no engagement we rest quickly; once the visitor has
+      // actually spoken we give a much longer trailing silence so think-pauses
+      // don't drop the call (the agent's own turn-taking handles short gaps).
+      restAfterGreetMs: 5000,
+      restAfterTurnMs: 9000,
+      wakeDebounceMs: 1500,         // ignore repeat wake-words within this window
       showConnectionStatus: false,  // hide "connecting/disconnected" plumbing text; just be seamless
+      voiceDebug: false,            // verbose voice lifecycle logging + visible status (also ?voice=debug)
       walkCadence: 1.25,  // px/s per px of character height — close to the clip's
                           // stride cadence, nudged slightly for screen responsiveness
       sceneDwellMs: 650,  // how long the reader must settle before a scene fires
@@ -35,6 +42,15 @@
     },
     window.MASCOT_CONFIG || {}
   );
+
+  // Opt into visible voice diagnostics with ?voice=debug (or ?voicedebug) — shows
+  // the connection status text and logs the full lifecycle, so a "not working"
+  // report turns into something you can actually read.
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get("voice") === "debug" || q.has("voicedebug")) { CFG.voiceDebug = true; CFG.showConnectionStatus = true; }
+  } catch (_) {}
+  const vlog = (...a) => { if (CFG.voiceDebug) console.info("[mascot]", ...a); };
 
   const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -474,19 +490,31 @@
   // live ElevenLabs call owns the mic, so the two never contend for it.
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
   let recog = null, micEnabled = false, recogRunning = false, recogPaused = false;
+  let recogBackoff = 300, lastWakeAt = 0;
   function buildRecognizer() {
     if (!SR) return null;
-    const r = new SR(); r.lang = CFG.lang; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
-    r.onstart = () => { recogRunning = true; };
-    r.onerror = (e) => { if (e.error === "not-allowed" || e.error === "service-not-allowed") { micEnabled = false; charEl.classList.remove("is-live"); } };
-    r.onend = () => { recogRunning = false; if (micEnabled && !recogPaused) setTimeout(startRecognition, 250); };
+    const r = new SR(); r.lang = CFG.lang; r.continuous = true; r.interimResults = false; r.maxAlternatives = 1;
+    r.onstart = () => { recogRunning = true; recogBackoff = 300; };
+    r.onerror = (e) => {
+      vlog("recognizer error:", e.error);
+      // Hard permission failures stop the listener; transient ones
+      // (network / aborted / no-speech) just let onend restart with backoff.
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") { micEnabled = false; charEl.classList.remove("is-live"); }
+    };
+    r.onend = () => {
+      recogRunning = false;
+      if (micEnabled && !recogPaused) { setTimeout(startRecognition, recogBackoff); recogBackoff = Math.min(recogBackoff * 1.6, 4000); }
+    };
     r.onresult = (e) => {
       let finalText = "";
       for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
       if (!finalText) return;
       const n = norm(finalText);
       if (voiceState === "localchat") { handleUtterance(finalText.trim()); return; } // local-brain fallback
-      if ((voiceState === "resting" || voiceState === "dormant") && CFG.wakeWords.some((w) => n.includes(w))) wakeFromName();
+      if ((voiceState === "resting" || voiceState === "dormant") && CFG.wakeWords.some((w) => n.includes(w))) {
+        const now = Date.now(); if (now - lastWakeAt < CFG.wakeDebounceMs) return; lastWakeAt = now;
+        vlog("wake word heard:", n); wakeFromName();
+      }
     };
     return r;
   }
@@ -499,7 +527,7 @@
   // dormant → (first interaction, mic granted) → live → (silence) → resting ⇄ live
   let voiceState = "dormant";      // dormant | resting | live | localchat
   let convoActive = false;         // true while a conversation owns the mascot (pauses page choreography)
-  let voicePrimed = false, voiceLivePending = false, agentSpeaking = false;
+  let voicePrimed = false, voiceLivePending = false, agentSpeaking = false, hadExchange = false;
   let restTimer = null, sleepTimer = null, busy = false;
   const hasBridge = () => !!window.ElevenLabsMascotBridge;
   function conversationSpot() { return { x: clamp(window.innerWidth - charW - 30, 20, window.innerWidth - charW - 8), y: groundY() }; }
@@ -531,6 +559,7 @@
     }
     voiceState = "live"; convoActive = true; voiceLivePending = false;
     clearTimeout(fidgetTimer); clearTimeout(sleepTimer); perchEl = null; perched = false;
+    charEl.classList.add("voice-live");
     pauseRecognition();                       // hand the mic to the realtime agent
     setVoiceStatus("Connecting…", "busy");
     const spot = conversationSpot();
@@ -555,12 +584,13 @@
   // let the mascot go back to roaming/guiding the page. Zero idle cost.
   function enterResting() {
     const wasLive = voiceState === "live";
-    voiceState = "resting"; convoActive = false; agentSpeaking = false;
+    voiceState = "resting"; convoActive = false; agentSpeaking = false; hadExchange = false;
     clearTimeout(restTimer); clearTimeout(sleepTimer);
     if (wasLive && hasBridge() && window.ElevenLabsMascotBridge.status !== "disconnected") {
       try { window.ElevenLabsMascotBridge.stop(); } catch (_) {}
     }
     setVoiceStatus("", "idle");
+    charEl.classList.remove("voice-live");
     charEl.classList.toggle("is-live", micEnabled);   // subtle ring = "listening for my name"
     facing = 1; if (!moving) setGesture("idle");
     if (micEnabled) resumeRecognition();
@@ -575,8 +605,13 @@
     goLive();
   }
 
-  // Rest the live agent after a beat of user silence (configurable).
-  function armRest() { clearTimeout(restTimer); restTimer = setTimeout(() => { if (voiceState === "live" && !agentSpeaking) enterResting(); }, CFG.restAfterMs); }
+  // Rest the live agent after user silence — short if they never engaged, long
+  // once a real exchange has happened so think-pauses don't drop the call.
+  function armRest() {
+    clearTimeout(restTimer);
+    const ms = hadExchange ? CFG.restAfterTurnMs : CFG.restAfterGreetMs;
+    restTimer = setTimeout(() => { if (voiceState === "live" && !agentSpeaking) { vlog("resting after", ms, "ms of silence"); enterResting(); } }, ms);
+  }
   function cancelRest() { clearTimeout(restTimer); }
 
   // -------- local-brain fallback (only if the realtime SDK is unavailable) ----
@@ -624,23 +659,36 @@
     },
     say, wake: wakeUp, sleep: goToSleep, enableMic, gesture: setGesture, config: CFG,
     state: () => gesture, voiceState: () => voiceState, hasWalk: () => hasWalk, scene: (id) => runScene(id, true),
+    diagnose: () => ({
+      voiceState, gesture, micEnabled, hadExchange, agentSpeaking,
+      bridge: hasBridge(), bridgeStatus: hasBridge() ? window.ElevenLabsMascotBridge.status : null,
+      speechRecognition: !!SR, recogRunning, agentId: CFG.elevenLabsAgentId,
+    }),
     elevenlabs: {
       // Fired once the voice SDK bridge has mounted. If a wake/greeting was
       // requested before it was ready, open the conversation now.
-      onBridgeReady: () => { if (voiceLivePending) goLive(); },
-      onStarting: () => { charEl.classList.add("is-live"); setVoiceStatus("Connecting…", "busy"); if (!moving) setGesture("listen"); },
-      onConnect: () => { voiceState = "live"; convoActive = true; charEl.classList.add("is-live"); setVoiceStatus("Live", "live"); setGesture("wave"); cancelRest(); armRest(); },
-      onDisconnect: () => { if (voiceState === "live") enterResting(); else { charEl.classList.toggle("is-live", micEnabled); setVoiceStatus("", "idle"); } },
+      onBridgeReady: () => { vlog("bridge ready"); if (voiceLivePending) goLive(); },
+      onStarting: () => { vlog("starting"); charEl.classList.add("is-live"); setVoiceStatus("Connecting…", "busy"); if (!moving) setGesture("listen"); },
+      onStatusChange: (s) => { const status = s && s.status ? s.status : s; vlog("status:", status); if (status === "connecting") setVoiceStatus("Connecting…", "busy"); },
+      onConnect: () => { vlog("connected"); voiceState = "live"; convoActive = true; hadExchange = false; charEl.classList.add("is-live"); setVoiceStatus("Live", "live"); setGesture("wave"); cancelRest(); armRest(); },
+      onDisconnect: (d) => { vlog("disconnected", d || ""); if (voiceState === "live") enterResting(); else { charEl.classList.toggle("is-live", micEnabled); setVoiceStatus("", "idle"); } },
       onSpeakingChange: (isSpeaking) => { if (voiceState !== "live") return; agentSpeaking = isSpeaking; setVoiceStatus(isSpeaking ? "Speaking" : "Listening", "live"); if (!moving) setGesture(isSpeaking ? "talk" : "listen"); if (isSpeaking) cancelRest(); else armRest(); },
       onModeChange: (mode) => { if (voiceState !== "live" || !mode || !mode.mode) return; const sp = mode.mode === "speaking"; agentSpeaking = sp; setVoiceStatus(sp ? "Speaking" : "Listening", "live"); if (!moving) setGesture(sp ? "talk" : "listen"); if (sp) cancelRest(); else armRest(); },
       onMessage: (message) => {
         const text = message?.message || message?.text || message?.sourceText || message?.transcript;
         if (!text) return;
         const role = message?.source || message?.role;
-        if (role === "user") { cancelRest(); showBubble({ you: text, sticky: true }); }
-        else showBubble({ text, sticky: false });
+        if (role === "user") {
+          // Visitor spoke → it's a real exchange now; show a beat of "thinking"
+          // until the agent starts replying, and switch to the longer rest window.
+          hadExchange = true; cancelRest();
+          if (!moving && !agentSpeaking) setGesture("think");
+          showBubble({ you: text, sticky: true });
+        } else {
+          showBubble({ text, sticky: false });
+        }
       },
-      onError: (error) => { console.warn("[mascot] ElevenLabs error", error); voiceFailover(); },
+      onError: (error) => { vlog("error", error); console.warn("[mascot] ElevenLabs error", error); voiceFailover(); },
     },
   };
 })();
