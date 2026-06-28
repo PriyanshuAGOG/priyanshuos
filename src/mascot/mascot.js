@@ -37,7 +37,7 @@
       voiceDebug: false,            // verbose voice lifecycle logging + visible status (also ?voice=debug)
       walkCadence: 1.25,  // px/s per px of character height — close to the clip's
                           // stride cadence, nudged slightly for screen responsiveness
-      sceneDwellMs: 650,  // how long the reader must settle before a scene fires
+      sceneDwellMs: 4500, // reader must settle on a section this long before the mascot walks over and acts — keeps it calm, not chasing every scroll
       elevenLabsAgentId: "agent_1401kw6hdp9gfnssm486zamz7f9d",
     },
     window.MASCOT_CONFIG || {}
@@ -562,8 +562,8 @@
     charEl.classList.add("voice-live");
     pauseRecognition();                       // hand the mic to the realtime agent
     setVoiceStatus("Connecting…", "busy");
-    const spot = conversationSpot();
-    moveTo(spot.x, spot.y, { gesture: "wave" });
+    // Talk from wherever the mascot already is — no jarring slide to a corner.
+    if (!moving) setGesture("wave");
     window.ElevenLabsMascotBridge.start().catch((error) => {
       console.warn("[mascot] voice connect failed — falling back", error);
       voiceFailover();
@@ -594,7 +594,9 @@
     charEl.classList.toggle("is-live", micEnabled);   // subtle ring = "listening for my name"
     facing = 1; if (!moving) setGesture("idle");
     if (micEnabled) resumeRecognition();
-    lastSceneId = null; runScene(activeSection(), true); armFidget();
+    // Stay where we are — the choreographer re-engages when the reader next
+    // settles on a section, so we don't snap-walk the instant a call ends.
+    armFidget();
   }
 
   // Heard "hi Priyanshu" while resting → instant visual wave (microseconds),
@@ -619,11 +621,8 @@
   function goLocalChat(greet) {
     voiceLivePending = false; voiceState = "localchat"; convoActive = true;
     clearTimeout(fidgetTimer); perchEl = null; perched = false;
-    const spot = conversationSpot();
-    moveTo(spot.x, spot.y, { gesture: "wave", onArrive: () => {
-      setGesture("wave");
-      if (greet) setTimeout(() => say(INTRO, { gesture: "talk" }), 600);
-    } });
+    if (!moving) setGesture("wave");   // converse in place, no slide
+    if (greet) setTimeout(() => { if (voiceState === "localchat") say(INTRO, { gesture: "talk" }); }, 600);
     armSleep();
     if (micEnabled) resumeRecognition();
   }
@@ -672,8 +671,8 @@
       onStatusChange: (s) => { const status = s && s.status ? s.status : s; vlog("status:", status); if (status === "connecting") setVoiceStatus("Connecting…", "busy"); },
       onConnect: () => { vlog("connected"); voiceState = "live"; convoActive = true; hadExchange = false; charEl.classList.add("is-live"); setVoiceStatus("Live", "live"); setGesture("wave"); cancelRest(); armRest(); },
       onDisconnect: (d) => { vlog("disconnected", d || ""); if (voiceState === "live") enterResting(); else { charEl.classList.toggle("is-live", micEnabled); setVoiceStatus("", "idle"); } },
-      onSpeakingChange: (isSpeaking) => { if (voiceState !== "live") return; agentSpeaking = isSpeaking; setVoiceStatus(isSpeaking ? "Speaking" : "Listening", "live"); if (!moving) setGesture(isSpeaking ? "talk" : "listen"); if (isSpeaking) cancelRest(); else armRest(); },
-      onModeChange: (mode) => { if (voiceState !== "live" || !mode || !mode.mode) return; const sp = mode.mode === "speaking"; agentSpeaking = sp; setVoiceStatus(sp ? "Speaking" : "Listening", "live"); if (!moving) setGesture(sp ? "talk" : "listen"); if (sp) cancelRest(); else armRest(); },
+      onSpeakingChange: (isSpeaking) => { if (voiceState !== "live") return; vlog("speaking:", isSpeaking); agentSpeaking = isSpeaking; setVoiceStatus(isSpeaking ? "Speaking" : "Listening", "live"); if (!moving) setGesture(isSpeaking ? "talk" : "listen"); if (isSpeaking) cancelRest(); else armRest(); },
+      onModeChange: (mode) => { if (voiceState !== "live" || !mode || !mode.mode) return; const sp = mode.mode === "speaking"; vlog("mode:", mode.mode); agentSpeaking = sp; setVoiceStatus(sp ? "Speaking" : "Listening", "live"); if (!moving) setGesture(sp ? "talk" : "listen"); if (sp) cancelRest(); else armRest(); },
       onMessage: (message) => {
         const text = message?.message || message?.text || message?.sourceText || message?.transcript;
         if (!text) return;
@@ -685,6 +684,9 @@
           if (!moving && !agentSpeaking) setGesture("think");
           showBubble({ you: text, sticky: true });
         } else {
+          // Agent is producing a reply — defer resting so a long answer is never
+          // cut off, even if speaking events are sparse, and keep the bubble.
+          cancelRest(); armRest();
           showBubble({ text, sticky: false });
         }
       },
