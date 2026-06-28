@@ -14,6 +14,7 @@ import NowSection from './components/sections/NowSection.jsx';
 import LabSection from './components/sections/LabSection.jsx';
 import ContactSection from './components/sections/ContactSection.jsx';
 import Footer from './components/sections/Footer.jsx';
+import ElevenLabsMascotBridge from './components/voice/ElevenLabsMascotBridge.jsx';
 
 export default function App() {
   useEffect(() => {
@@ -46,6 +47,7 @@ export default function App() {
       <Footer />
       <Dock />
       <Overlays />
+      <ElevenLabsMascotBridge />
     </>
   );
 }
