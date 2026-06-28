@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import GlobalChrome from './components/chrome/GlobalChrome.jsx';
 import Dock from './components/chrome/Dock.jsx';
 import Overlays from './components/chrome/Overlays.jsx';
@@ -14,7 +14,27 @@ import NowSection from './components/sections/NowSection.jsx';
 import LabSection from './components/sections/LabSection.jsx';
 import ContactSection from './components/sections/ContactSection.jsx';
 import Footer from './components/sections/Footer.jsx';
-import ElevenLabsMascotBridge from './components/voice/ElevenLabsMascotBridge.jsx';
+
+// The ElevenLabs voice bridge pulls in the WebRTC/LiveKit SDK (the bulk of the
+// JS payload). Code-split it and mount it during idle time after first paint so
+// the page and mascot render fast — it's ready well before a user taps to talk.
+const ElevenLabsMascotBridge = lazy(() => import('./components/voice/ElevenLabsMascotBridge.jsx'));
+
+function DeferredVoiceBridge() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1200));
+    const cancel = window.cancelIdleCallback || clearTimeout;
+    const handle = idle(() => setReady(true));
+    return () => cancel(handle);
+  }, []);
+  if (!ready) return null;
+  return (
+    <Suspense fallback={null}>
+      <ElevenLabsMascotBridge />
+    </Suspense>
+  );
+}
 
 export default function App() {
   useEffect(() => {
@@ -47,7 +67,7 @@ export default function App() {
       <Footer />
       <Dock />
       <Overlays />
-      <ElevenLabsMascotBridge />
+      <DeferredVoiceBridge />
     </>
   );
 }

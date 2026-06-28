@@ -480,12 +480,15 @@
     if (!bridge) return false;
     if (bridge.status === "connected") { bridge.stop(); return true; }
     convoActive = true; clearTimeout(fidgetTimer); perchEl = null; perched = false;
+    setVoiceStatus("Connecting…", "busy");
     const spot = conversationSpot();
     moveTo(spot.x, spot.y, { gesture: "listen", onArrive: () => showBubble({ text: "Connecting PriyanshuOS voice…", source: "→ ElevenLabs Conversational AI", sticky: true }) });
     bridge.start().catch((error) => {
       console.warn("[mascot] ElevenLabs conversation failed", error);
+      setVoiceStatus("Voice error", "error");
       showBubble({ text: "I couldn't connect the voice agent. Check mic permission and the ElevenLabs API key in Vercel.", source: "→ voice connection failed", sticky: false });
       convoActive = false;
+      charEl.classList.remove("is-live");
       if (!moving) setGesture("idle");
     });
     return true;
@@ -528,11 +531,11 @@
     say, wake: wakeUp, sleep: goToSleep, enableMic, gesture: setGesture, config: CFG,
     state: () => gesture, hasWalk: () => hasWalk, scene: (id) => runScene(id, true),
     elevenlabs: {
-      onStarting: () => { convoActive = true; charEl.classList.add("is-live"); setGesture("listen"); showBubble({ text: "Asking for mic access…", source: "→ PriyanshuOS voice", sticky: true }); },
-      onConnect: () => { convoActive = true; charEl.classList.add("is-live"); setGesture("listen"); showBubble({ text: "You're connected — talk to me naturally.", source: "→ ElevenLabs agent: PriyanshuOS", sticky: false }); },
-      onDisconnect: () => { charEl.classList.remove("is-live"); convoActive = false; clearTimeout(sleepTimer); if (!moving) setGesture("idle"); showBubble({ text: "Voice chat ended. Tap me whenever you want to talk again.", source: "→ disconnected", sticky: false }); armFidget(); },
-      onSpeakingChange: (isSpeaking) => { if (convoActive && !moving) setGesture(isSpeaking ? "talk" : "listen"); },
-      onModeChange: (mode) => { if (mode && mode.mode) setGesture(mode.mode === "speaking" ? "talk" : "listen"); },
+      onStarting: () => { convoActive = true; charEl.classList.add("is-live"); setGesture("listen"); setVoiceStatus("Connecting…", "busy"); showBubble({ text: "Asking for mic access…", source: "→ PriyanshuOS voice", sticky: true }); },
+      onConnect: () => { convoActive = true; charEl.classList.add("is-live"); setGesture("listen"); setVoiceStatus("Listening", "live"); showBubble({ text: "You're connected — talk to me naturally.", source: "→ ElevenLabs agent: PriyanshuOS", sticky: false }); },
+      onDisconnect: () => { charEl.classList.remove("is-live"); convoActive = false; clearTimeout(sleepTimer); if (!moving) setGesture("idle"); setVoiceStatus("Voice ready", "idle"); showBubble({ text: "Voice chat ended. Tap me whenever you want to talk again.", source: "→ disconnected", sticky: false }); armFidget(); },
+      onSpeakingChange: (isSpeaking) => { if (!convoActive) return; setVoiceStatus(isSpeaking ? "Speaking" : "Listening", "live"); if (!moving) setGesture(isSpeaking ? "talk" : "listen"); },
+      onModeChange: (mode) => { if (mode && mode.mode) { setVoiceStatus(mode.mode === "speaking" ? "Speaking" : "Listening", "live"); setGesture(mode.mode === "speaking" ? "talk" : "listen"); } },
       onMessage: (message) => {
         const text = message?.message || message?.text || message?.sourceText || message?.transcript;
         if (!text) return;
@@ -540,7 +543,7 @@
         if (role === "user") showBubble({ you: text, sticky: true });
         else showBubble({ text, source: "→ PriyanshuOS", sticky: false });
       },
-      onError: (error) => { console.warn("[mascot] ElevenLabs error", error); showBubble({ text: "Voice agent error. Please try tapping me again.", source: "→ ElevenLabs", sticky: false }); },
+      onError: (error) => { console.warn("[mascot] ElevenLabs error", error); setVoiceStatus("Voice error", "error"); showBubble({ text: "Voice agent error. Please try tapping me again.", source: "→ ElevenLabs", sticky: false }); },
     },
   };
 })();
