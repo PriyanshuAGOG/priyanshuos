@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Conversation } from '@elevenlabs/react';
+import { useConversation } from '@elevenlabs/react';
 
 const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID || 'agent_1401kw6hdp9gfnssm486zamz7f9d';
 
@@ -12,88 +12,51 @@ async function fetchConversationToken() {
 }
 
 export default function ElevenLabsMascotBridge() {
-  const conversationRef = useRef(null);
   const statusRef = useRef('disconnected');
-  const speakingRef = useRef(false);
+  const conversation = useConversation({
+    onConnect: () => window.PriyanshuMascot?.elevenlabs?.onConnect?.(),
+    onDisconnect: () => window.PriyanshuMascot?.elevenlabs?.onDisconnect?.(),
+    onMessage: (message) => window.PriyanshuMascot?.elevenlabs?.onMessage?.(message),
+    onError: (error) => window.PriyanshuMascot?.elevenlabs?.onError?.(error),
+    onModeChange: (mode) => window.PriyanshuMascot?.elevenlabs?.onModeChange?.(mode),
+  });
 
-  const setStatus = (status) => {
-    statusRef.current = status;
-    window.PriyanshuMascot?.elevenlabs?.onStatusChange?.(status);
-  };
-
-  const setSpeaking = (isSpeaking) => {
-    speakingRef.current = isSpeaking;
-    window.PriyanshuMascot?.elevenlabs?.onSpeakingChange?.(isSpeaking);
-  };
+  statusRef.current = conversation.status;
 
   const bridge = useMemo(() => ({
     get status() { return statusRef.current; },
-    get isSpeaking() { return speakingRef.current; },
+    get isSpeaking() { return conversation.isSpeaking; },
     async start() {
-      if (conversationRef.current || statusRef.current === 'connecting') return;
       window.PriyanshuMascot?.elevenlabs?.onStarting?.();
-      setStatus('connecting');
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-        const conversationToken = await fetchConversationToken();
-        conversationRef.current = await Conversation.startSession({
-          conversationToken,
-          connectionType: 'webrtc',
-          onConnect: () => {
-            setStatus('connected');
-            window.PriyanshuMascot?.elevenlabs?.onConnect?.();
-          },
-          onDisconnect: () => {
-            conversationRef.current = null;
-            setSpeaking(false);
-            setStatus('disconnected');
-            window.PriyanshuMascot?.elevenlabs?.onDisconnect?.();
-          },
-          onMessage: (message) => window.PriyanshuMascot?.elevenlabs?.onMessage?.(message),
-          onError: (error) => {
-            conversationRef.current = null;
-            setSpeaking(false);
-            setStatus('error');
-            window.PriyanshuMascot?.elevenlabs?.onError?.(error);
-          },
-          onModeChange: (mode) => {
-            setSpeaking(mode?.mode === 'speaking' || mode === 'speaking');
-            window.PriyanshuMascot?.elevenlabs?.onModeChange?.(mode);
-          },
-        });
-      } catch (error) {
-        conversationRef.current = null;
-        setSpeaking(false);
-        setStatus('error');
-        throw error;
-      }
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const conversationToken = await fetchConversationToken();
+      await conversation.startSession({ conversationToken, connectionType: 'webrtc' });
     },
     stop() {
-      conversationRef.current?.endSession();
-      conversationRef.current = null;
-      setSpeaking(false);
-      setStatus('disconnected');
-      window.PriyanshuMascot?.elevenlabs?.onDisconnect?.();
+      conversation.endSession();
     },
     sendText(text) {
-      conversationRef.current?.sendUserMessage(text);
+      conversation.sendUserMessage(text);
     },
     sendContext(text) {
-      conversationRef.current?.sendContextualUpdate(text);
+      conversation.sendContextualUpdate(text);
     },
     setVolume(volume) {
-      conversationRef.current?.setVolume({ volume });
+      conversation.setVolume({ volume });
     },
-  }), []);
+  }), [conversation]);
 
   useEffect(() => {
     window.ElevenLabsMascotBridge = bridge;
     return () => {
       if (window.ElevenLabsMascotBridge === bridge) delete window.ElevenLabsMascotBridge;
-      conversationRef.current?.endSession();
-      conversationRef.current = null;
+      conversation.endSession();
     };
-  }, [bridge]);
+  }, [bridge, conversation]);
+
+  useEffect(() => {
+    window.PriyanshuMascot?.elevenlabs?.onSpeakingChange?.(conversation.isSpeaking);
+  }, [conversation.isSpeaking]);
 
   return null;
 }

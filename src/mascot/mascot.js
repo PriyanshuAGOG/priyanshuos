@@ -478,7 +478,7 @@
   function startElevenLabsConversation() {
     const bridge = window.ElevenLabsMascotBridge;
     if (!bridge) return false;
-    if (bridge.status === "connected") { setVoiceStatus("Ending voice…", "busy"); bridge.stop(); return true; }
+    if (bridge.status === "connected") { bridge.stop(); return true; }
     convoActive = true; clearTimeout(fidgetTimer); perchEl = null; perched = false;
     const spot = conversationSpot();
     moveTo(spot.x, spot.y, { gesture: "listen", onArrive: () => showBubble({ text: "Connecting PriyanshuOS voice…", source: "→ ElevenLabs Conversational AI", sticky: true }) });
@@ -528,12 +528,11 @@
     say, wake: wakeUp, sleep: goToSleep, enableMic, gesture: setGesture, config: CFG,
     state: () => gesture, hasWalk: () => hasWalk, scene: (id) => runScene(id, true),
     elevenlabs: {
-      onStarting: () => { convoActive = true; charEl.classList.add("is-live"); setVoiceStatus("Mic permission…", "busy"); setGesture("listen"); showBubble({ text: "Asking for mic access…", source: "→ PriyanshuOS voice", sticky: true }); },
-      onConnect: () => { convoActive = true; charEl.classList.add("is-live"); setVoiceStatus("Live voice", "live"); setGesture("listen"); showBubble({ text: "You're connected — talk to me naturally.", source: "→ ElevenLabs agent: PriyanshuOS", sticky: false }); },
-      onDisconnect: () => { charEl.classList.remove("is-live"); setVoiceStatus("Voice ready", "idle"); convoActive = false; clearTimeout(sleepTimer); if (!moving) setGesture("idle"); showBubble({ text: "Voice chat ended. Tap me whenever you want to talk again.", source: "→ disconnected", sticky: false }); armFidget(); },
-      onSpeakingChange: (isSpeaking) => { if (convoActive && !moving) { setVoiceStatus(isSpeaking ? "Priyanshu speaking" : "Listening", "live"); setGesture(isSpeaking ? "talk" : "listen"); } },
-      onModeChange: (mode) => { if (mode && mode.mode) { setVoiceStatus(mode.mode === "speaking" ? "Priyanshu speaking" : "Listening", "live"); setGesture(mode.mode === "speaking" ? "talk" : "listen"); } },
-      onStatusChange: (status) => { if (status === "connecting") setVoiceStatus("Connecting…", "busy"); },
+      onStarting: () => { convoActive = true; charEl.classList.add("is-live"); setGesture("listen"); showBubble({ text: "Asking for mic access…", source: "→ PriyanshuOS voice", sticky: true }); },
+      onConnect: () => { convoActive = true; charEl.classList.add("is-live"); setGesture("listen"); showBubble({ text: "You're connected — talk to me naturally.", source: "→ ElevenLabs agent: PriyanshuOS", sticky: false }); },
+      onDisconnect: () => { charEl.classList.remove("is-live"); convoActive = false; clearTimeout(sleepTimer); if (!moving) setGesture("idle"); showBubble({ text: "Voice chat ended. Tap me whenever you want to talk again.", source: "→ disconnected", sticky: false }); armFidget(); },
+      onSpeakingChange: (isSpeaking) => { if (convoActive && !moving) setGesture(isSpeaking ? "talk" : "listen"); },
+      onModeChange: (mode) => { if (mode && mode.mode) setGesture(mode.mode === "speaking" ? "talk" : "listen"); },
       onMessage: (message) => {
         const text = message?.message || message?.text || message?.sourceText || message?.transcript;
         if (!text) return;
@@ -541,7 +540,7 @@
         if (role === "user") showBubble({ you: text, sticky: true });
         else showBubble({ text, source: "→ PriyanshuOS", sticky: false });
       },
-      onError: (error) => { console.warn("[mascot] ElevenLabs error", error); charEl.classList.remove("is-live"); setVoiceStatus("Voice unavailable", "error"); showBubble({ text: "Voice agent error. Please try tapping me again.", source: "→ ElevenLabs", sticky: false }); },
+      onError: (error) => { console.warn("[mascot] ElevenLabs error", error); showBubble({ text: "Voice agent error. Please try tapping me again.", source: "→ ElevenLabs", sticky: false }); },
     },
   };
 })();
