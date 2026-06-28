@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { ConversationProvider, useConversation } from '@elevenlabs/react';
+import { useConversation } from '@elevenlabs/react';
 
 const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID || 'agent_1401kw6hdp9gfnssm486zamz7f9d';
 
@@ -11,7 +11,7 @@ async function fetchConversationToken() {
   return data.token;
 }
 
-function ElevenLabsMascotBridgeRuntime() {
+export default function ElevenLabsMascotBridge() {
   const statusRef = useRef('disconnected');
   const conversation = useConversation({
     onConnect: () => window.PriyanshuMascot?.elevenlabs?.onConnect?.(),
@@ -19,7 +19,6 @@ function ElevenLabsMascotBridgeRuntime() {
     onMessage: (message) => window.PriyanshuMascot?.elevenlabs?.onMessage?.(message),
     onError: (error) => window.PriyanshuMascot?.elevenlabs?.onError?.(error),
     onModeChange: (mode) => window.PriyanshuMascot?.elevenlabs?.onModeChange?.(mode),
-    onStatusChange: (status) => window.PriyanshuMascot?.elevenlabs?.onStatusChange?.(status),
   });
 
   statusRef.current = conversation.status;
@@ -31,7 +30,7 @@ function ElevenLabsMascotBridgeRuntime() {
       window.PriyanshuMascot?.elevenlabs?.onStarting?.();
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const conversationToken = await fetchConversationToken();
-      conversation.startSession({ conversationToken, connectionType: 'webrtc' });
+      await conversation.startSession({ conversationToken, connectionType: 'webrtc' });
     },
     stop() {
       conversation.endSession();
@@ -60,12 +59,4 @@ function ElevenLabsMascotBridgeRuntime() {
   }, [conversation.isSpeaking]);
 
   return null;
-}
-
-export default function ElevenLabsMascotBridge() {
-  return (
-    <ConversationProvider agentId={AGENT_ID}>
-      <ElevenLabsMascotBridgeRuntime />
-    </ConversationProvider>
-  );
 }
