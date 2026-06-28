@@ -3,6 +3,12 @@ import { ConversationProvider, useConversation } from '@elevenlabs/react';
 
 const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID || 'agent_1401kw6hdp9gfnssm486zamz7f9d';
 const GREETING = 'Heyo! Welcome to Priyanshu OS — I\'m Priyanshu. Ask me anything, or just look around.';
+// ElevenLabs rejects conversation config overrides unless the agent has them
+// explicitly enabled in its security settings — and that rejection comes back
+// as a malformed error event that crashes the SDK. So we only send the
+// firstMessage override when the deployment opts in; otherwise the greeting is
+// expected to be configured on the agent itself in the dashboard.
+const ALLOW_OVERRIDES = import.meta.env.VITE_ELEVENLABS_ALLOW_OVERRIDES === 'true';
 
 async function fetchConversationToken() {
   const response = await fetch(`/api/elevenlabs-token?agent_id=${encodeURIComponent(AGENT_ID)}`);
@@ -42,10 +48,8 @@ function MascotBridge() {
         try {
           window.PriyanshuMascot?.elevenlabs?.onStarting?.();
           await navigator.mediaDevices.getUserMedia({ audio: true });
-          const sessionBase = {
-            connectionType: 'webrtc',
-            overrides: { agent: { firstMessage: GREETING } },
-          };
+          const sessionBase = { connectionType: 'webrtc' };
+          if (ALLOW_OVERRIDES) sessionBase.overrides = { agent: { firstMessage: GREETING } };
           // Secure path first: a short-lived WebRTC token minted server-side
           // from ELEVENLABS_API_KEY. Fall back to the public agent id directly
           // if the token endpoint/key isn't available, so voice works either way.
@@ -73,7 +77,23 @@ function MascotBridge() {
     const bridge = bridgeRef.current;
     window.ElevenLabsMascotBridge = bridge;
     window.PriyanshuMascot?.elevenlabs?.onBridgeReady?.();
+
+    // The SDK's server-error handler reads `error_event.error_type` without
+    // guarding the shape, so a malformed server error event surfaces as an
+    // uncaught promise rejection that can break the page. Swallow only that
+    // specific known SDK fault — everything else propagates normally.
+    const onUnhandled = (event) => {
+      const reason = event.reason;
+      const msg = reason && (reason.message || String(reason));
+      if (msg && /error_type/.test(msg) && /undefined/.test(msg)) {
+        console.warn('[mascot] suppressed ElevenLabs SDK error-event parse fault:', msg);
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('unhandledrejection', onUnhandled);
+
     return () => {
+      window.removeEventListener('unhandledrejection', onUnhandled);
       if (window.ElevenLabsMascotBridge === bridge) delete window.ElevenLabsMascotBridge;
       try { convoRef.current?.endSession?.(); } catch (_) {}
     };
