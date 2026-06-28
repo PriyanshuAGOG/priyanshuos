@@ -56,6 +56,25 @@
 .m-spin{width:22px;height:22px;border-radius:50%;border:3px solid rgba(255,255,255,.15);border-top-color:var(--m-accent);animation:m-spin .8s linear infinite}
 @keyframes m-spin{to{transform:rotate(360deg)}}
 
+
+.m-voice-status{
+  position:absolute; left:50%; bottom:-8px; transform:translate(-50%,100%);
+  max-width:160px; white-space:nowrap; pointer-events:none;
+  padding:5px 8px; border-radius:999px;
+  background:rgba(11,11,11,.82); color:var(--muted,#A3A3A3);
+  border:1px solid var(--border,#242424);
+  font-family:var(--f-mono,monospace); font-size:9px; letter-spacing:.12em; text-transform:uppercase;
+  box-shadow:0 10px 24px rgba(0,0,0,.35); opacity:.78;
+  backdrop-filter:blur(8px); transition:opacity .2s, color .2s, border-color .2s, background .2s;
+}
+.m-char:hover .m-voice-status,.m-char.is-live .m-voice-status{opacity:1}
+.m-voice-status::before{content:""; display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:6px; background:currentColor}
+.m-voice-status[data-tone="busy"]{color:#FFD166; border-color:rgba(255,209,102,.35)}
+.m-voice-status[data-tone="live"]{color:var(--m-accent); border-color:color-mix(in srgb,var(--m-accent),transparent 58%); background:rgba(13,22,16,.88)}
+.m-voice-status[data-tone="live"]::before{animation:m-status-pulse 1.2s ease-in-out infinite}
+.m-voice-status[data-tone="error"]{color:#FF6B6B; border-color:rgba(255,107,107,.45)}
+@keyframes m-status-pulse{0%,100%{transform:scale(1);opacity:.75}50%{transform:scale(1.45);opacity:1}}
+
 /* a faint "listening" ring so the visitor knows the mic is live (no icons) */
 .m-char.is-live::before{
   content:""; position:absolute; left:50%; top:50%; width:84%; height:84%;

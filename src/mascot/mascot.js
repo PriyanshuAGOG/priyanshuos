@@ -51,7 +51,8 @@
   charEl.setAttribute("aria-label", "Talk to Priyanshu");
   const canvasWrap = el("div", "m-canvaswrap");
   const veil = el("div", "m-veil", '<div class="m-spin"></div>');
-  charEl.append(canvasWrap, veil);
+  const voiceStatus = el("div", "m-voice-status", "Voice ready");
+  charEl.append(canvasWrap, veil, voiceStatus);
   const bubble = el("div", "m-bubble");
   root.append(charEl, bubble);
   document.body.appendChild(root);
@@ -318,6 +319,12 @@
 
   // ---------------------------------------------------------------- bubble
   let bubbleT = null;
+  function setVoiceStatus(label, tone = "idle") {
+    voiceStatus.textContent = label;
+    voiceStatus.dataset.tone = tone;
+    charEl.setAttribute("aria-label", label === "Voice ready" ? "Talk to Priyanshu" : label);
+  }
+
   function showBubble({ you, text, source, sticky }) {
     clearTimeout(bubbleT);
     bubble.innerHTML = '<div class="m-card">' +
