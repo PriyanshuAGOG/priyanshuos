@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { useConversation } from '@elevenlabs/react';
+import { ConversationProvider, useConversation } from '@elevenlabs/react';
 
 const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID || 'agent_1401kw6hdp9gfnssm486zamz7f9d';
 
@@ -11,7 +11,7 @@ async function fetchConversationToken() {
   return data.token;
 }
 
-export default function ElevenLabsMascotBridge() {
+function MascotBridge() {
   const statusRef = useRef('disconnected');
   const conversation = useConversation({
     onConnect: () => window.PriyanshuMascot?.elevenlabs?.onConnect?.(),
@@ -29,8 +29,17 @@ export default function ElevenLabsMascotBridge() {
     async start() {
       window.PriyanshuMascot?.elevenlabs?.onStarting?.();
       await navigator.mediaDevices.getUserMedia({ audio: true });
-      const conversationToken = await fetchConversationToken();
-      await conversation.startSession({ conversationToken, connectionType: 'webrtc' });
+      // Secure path first: a short-lived WebRTC token minted server-side from
+      // the ElevenLabs API key (set in Vercel). If that endpoint is missing or
+      // the key isn't configured, fall back to connecting with the public
+      // agent id directly so the voice agent still works.
+      try {
+        const conversationToken = await fetchConversationToken();
+        await conversation.startSession({ conversationToken, connectionType: 'webrtc' });
+      } catch (tokenError) {
+        console.warn('[mascot] token path failed, connecting with agent id', tokenError);
+        await conversation.startSession({ agentId: AGENT_ID, connectionType: 'webrtc' });
+      }
     },
     stop() {
       conversation.endSession();
@@ -59,4 +68,16 @@ export default function ElevenLabsMascotBridge() {
   }, [conversation.isSpeaking]);
 
   return null;
+}
+
+export default function ElevenLabsMascotBridge() {
+  // `useConversation` (and the granular hooks it composes) must run inside a
+  // ConversationProvider in @elevenlabs/react ≥1.x — without it React throws
+  // "useRegisterCallbacks must be used within a ConversationProvider", which
+  // crashes the whole app before the page can render.
+  return (
+    <ConversationProvider>
+      <MascotBridge />
+    </ConversationProvider>
+  );
 }
