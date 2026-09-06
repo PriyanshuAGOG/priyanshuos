@@ -1,550 +1,523 @@
 /* =========================================================================
-   MASCOT ENGINE v2 — performance-first rewrite
-   - Reusable factory: createMascot(container, options) — mount anywhere,
-     any size, multiple instances per page if needed.
-   - LAZY LOADING: only the first idle clip is fetched on mount. Every other
-     gesture's video is created and fetched on first use, then cached.
-   - Pauses all decode/render work when off-screen or tab is hidden.
-   - Renders on video-frame-ready callbacks (~24fps) instead of every vsync,
-     so it never burns more GPU/CPU than the source footage needs.
-   - Respects prefers-reduced-motion: no ambient cycling, no spontaneous
-     attention-seeking, no particle bursts.
+   PRIYANSHU AVATAR ENGINE v3 — lightweight procedural 3D
+   -------------------------------------------------------------------------
+   Replaces the old chroma-key video pipeline with a true realtime WebGL avatar.
+   No video decoding, no per-frame video texture uploads, no animation assets.
+
+   Public API stays compatible with the existing Priyanshu OS choreography:
+     createMascot(container, options)
+     .trigger(state)
+     .goIdle()
+     .preload()                 // no-op compatibility
+     .supports(state)
+     .setSpeaking(bool)
+     .setListening(bool)
+     .setAudioLevel(0..1)
+     .setInputLevel(0..1)
+     .destroy()
+
+   The character is intentionally stylised to match the supplied references:
+   black swept hair, glasses, white shirt, charcoal jacket, black trousers,
+   white sneakers and warm medium-brown skin.
    ========================================================================= */
 
 (function (global) {
   "use strict";
 
-  const GESTURES = {
-    idle:   { label: "Idle",   emoji: "💤", loop: true,  variants: ["idle_1", "idle_2"] },
-    wave:   { label: "Wave",   emoji: "👋", loop: false, variants: ["wave_1", "wave_2", "wave_3", "wave_4"] },
-    point:  { label: "Point",  emoji: "👉", loop: false, variants: ["point_1", "point_2", "point_3", "point_4"] },
-    sit:    { label: "Sit",    emoji: "🪑", loop: true,  variants: ["sit_1", "sit_2"] },
-    think:  { label: "Think",  emoji: "🤔", loop: true,  variants: ["think_1", "think_2", "think_3", "think_4"] },
-    listen: { label: "Listen", emoji: "👂", loop: true,  variants: ["listen_1", "listen_2", "listen_3", "listen_4", "listen_5", "listen_6"] },
-    talk:   { label: "Talk",   emoji: "💬", loop: true,  variants: ["talk_1", "talk_2", "talk_3", "talk_4"] },
-    groove: { label: "Groove", emoji: "🕺", loop: true,  variants: ["groove_1"] },
-    // Locomotion clip used while the mascot travels (green-screen, keyed live
-    // like the rest). Add more walk_N variants here if you ship them.
-    walk:   { label: "Walk",   emoji: "🚶", loop: true,  variants: ["walk_1"] },
-  };
+  const THREE_URL = "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
+  const STATES = ["idle", "wave", "point", "sit", "think", "listen", "talk", "groove", "walk"];
+  let threePromise = null;
 
-  const ONE_SHOT_STATES = new Set(["wave", "point"]);
-  const REACTION_STATES = ["wave", "think", "talk", "listen", "groove"];
-  const SPEECH_LINES = {
-    wave: ["Hey! 👋", "Good to see you!", "Hello there!"],
-    point: ["Check this out!", "Over here!", "Look!"],
-    think: ["Hmm, let me think…", "Good question…", "One sec…"],
-    talk: ["So, here's the thing —", "Let me explain…", "Quick update!"],
-    listen: ["I'm listening…", "Go on…", "Tell me more."],
-    sit: ["Taking a breather.", "Just resting here."],
-    groove: ["Let's go! 🎵", "Feeling it!", "Woo!"],
-    idle: [],
-  };
-
-  const VERT_SRC = `#version 300 es
-    in vec2 aPos;
-    in vec2 aUV;
-    out vec2 vUV;
-    void main(){
-      vUV = aUV;
-      gl_Position = vec4(aPos, 0.0, 1.0);
-    }
-  `;
-
-  const FRAG_SRC = `#version 300 es
-    precision highp float;
-    in vec2 vUV;
-    out vec4 outColor;
-    uniform sampler2D uTex;
-    uniform float uLo;
-    uniform float uHi;
-    uniform float uSpillStrength;
-
-    void main(){
-      vec4 src = texture(uTex, vUV);
-      float r = src.r, g = src.g, b = src.b;
-      float maxRB = max(r, b);
-      float diff = g - maxRB;
-
-      // Derivative-based edge anti-aliasing: widen the key transition by the
-      // screen-space rate of change of diff so the silhouette stays smooth
-      // (no stair-stepping / pixelated rim) at any on-screen scale.
-      float aa = max(fwidth(diff), 0.0008) * 1.25;
-      float a = smoothstep(uLo - aa, uHi + aa, diff);
-      a = pow(a, 0.8); // gentler curve = softer, cleaner edge feather
-      float alpha = 1.0 - a;
-
-      float spillT = smoothstep(uLo * 0.1, uHi * 0.75, diff) * uSpillStrength;
-      float gTarget = min(g, maxRB * 0.98);
-      float gCorrected = mix(g, gTarget, spillT);
-
-      vec3 color = vec3(r, gCorrected, b);
-      outColor = vec4(color * alpha, alpha);
-    }
-  `;
-
-  function compileShader(gl, type, src) {
-    const sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      const log = gl.getShaderInfoLog(sh);
-      gl.deleteShader(sh);
-      throw new Error("Shader compile failed: " + log);
-    }
-    return sh;
+  function loadThree() {
+    if (!threePromise) threePromise = import(/* @vite-ignore */ THREE_URL);
+    return threePromise;
   }
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const damp = (lambda, dt) => 1 - Math.exp(-lambda * dt);
 
   function prefersReducedMotion() {
-    return global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return !!(global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }
 
-  /**
-   * Mount an interactive mascot into `container`.
-   * @param {HTMLElement} container - element to mount canvas + UI hooks into
-   * @param {Object} opts
-   *   videoBase: string path to the mascot videos folder (default "assets/videos/")
-   *   autoIdle: bool - start playing idle immediately on mount (default true)
-   *   ambient: bool - cycle idle variants periodically (default true, off if reduced-motion)
-   *   spontaneous: bool - attention-seeking after quiet period (default true, off if reduced-motion)
-   *   fx: bool - particle bursts on gesture trigger (default true, off if reduced-motion)
-   *   onStateChange: (stateKey) => void
-   *   onSpeech: (text|null) => void
-   */
+  function lowPowerDevice() {
+    const mem = Number(navigator.deviceMemory || 8);
+    const cores = Number(navigator.hardwareConcurrency || 8);
+    return mem <= 4 || cores <= 4;
+  }
+
+  function fallbackCharacter(container) {
+    const el = document.createElement("div");
+    el.className = "m-3d-fallback";
+    el.setAttribute("aria-hidden", "true");
+    el.innerHTML = '<div class="m-3d-fallback-head"><span></span></div><div class="m-3d-fallback-body"></div>';
+    container.appendChild(el);
+    return () => el.remove();
+  }
+
   function createMascot(container, opts = {}) {
-    const reduced = prefersReducedMotion();
     const options = Object.assign({
-      videoBase: "assets/videos/",
       autoIdle: true,
-      ambient: !reduced,
-      spontaneous: !reduced,
-      fx: !reduced,
       onStateChange: null,
       onSpeech: null,
     }, opts);
 
-    // ---- DOM scaffolding ----
-    const canvas = document.createElement("canvas");
-    canvas.style.width = "100%";
-    canvas.style.height = "100%";
-    canvas.style.display = "block";
-    container.appendChild(canvas);
-
-    const videoPool = document.createElement("div");
-    videoPool.style.position = "absolute";
-    videoPool.style.width = "1px";
-    videoPool.style.height = "1px";
-    videoPool.style.overflow = "hidden";
-    videoPool.style.opacity = "0";
-    videoPool.style.pointerEvents = "none";
-    container.appendChild(videoPool);
-
-    // ---- WebGL setup ----
-    const gl = canvas.getContext("webgl2", { alpha: true, premultipliedAlpha: false, antialias: true });
-    if (!gl) {
-      console.error("[mascot] WebGL2 unavailable");
-      return { destroy() {}, trigger() {}, states: [] };
-    }
-
-    const vertShader = compileShader(gl, gl.VERTEX_SHADER, VERT_SRC);
-    const fragShader = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_SRC);
-    const program = gl.createProgram();
-    gl.attachShader(program, vertShader);
-    gl.attachShader(program, fragShader);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error("[mascot] Program link failed:", gl.getProgramInfoLog(program));
-      return { destroy() {}, trigger() {}, states: [] };
-    }
-    gl.useProgram(program);
-
-    const quad = new Float32Array([
-      -1, -1, 0, 1,
-       1, -1, 1, 1,
-      -1,  1, 0, 0,
-       1, -1, 1, 1,
-       1,  1, 1, 0,
-      -1,  1, 0, 0,
-    ]);
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
-
-    const aPosLoc = gl.getAttribLocation(program, "aPos");
-    const aUVLoc = gl.getAttribLocation(program, "aUV");
-    gl.enableVertexAttribArray(aPosLoc);
-    gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 16, 0);
-    gl.enableVertexAttribArray(aUVLoc);
-    gl.vertexAttribPointer(aUVLoc, 2, gl.FLOAT, false, 16, 8);
-
-    const uTexLoc = gl.getUniformLocation(program, "uTex");
-    const uLoLoc = gl.getUniformLocation(program, "uLo");
-    const uHiLoc = gl.getUniformLocation(program, "uHi");
-    const uSpillLoc = gl.getUniformLocation(program, "uSpillStrength");
-
-    let keyLo = 0.08;
-    let keyHi = 0.30;
-    const keySpill = 1.0;
-
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    let lastW = 0, lastH = 0;
-    function resizeCanvasToDisplaySize() {
-      // Render at up to 2x so the keyed silhouette stays crisp when the
-      // free-roaming mascot is shown larger; still capped to avoid paying
-      // for 3x retina on a video texture that doesn't need it.
-      const dpr = Math.min(global.devicePixelRatio || 1, 2);
-      const w = Math.max(1, Math.round(container.clientWidth * dpr));
-      const h = Math.max(1, Math.round(container.clientHeight * dpr));
-      if (w !== lastW || h !== lastH) {
-        canvas.width = w;
-        canvas.height = h;
-        lastW = w; lastH = h;
-      }
-    }
-
-    // ---- LAZY video pool ----
-    // Videos are created on first use, not all up front. Once created they
-    // stay cached (paused, decoded-ready) for instant reuse.
-    const videoEls = {};       // name -> HTMLVideoElement
-    const loadingPromises = {}; // name -> Promise (in-flight load dedupe)
-
-    function getOrCreateVideo(name) {
-      if (videoEls[name]) return videoEls[name];
-      const v = document.createElement("video");
-      const sourceWebm = document.createElement("source");
-      sourceWebm.src = options.videoBase + name + ".webm";
-      sourceWebm.type = "video/webm";
-      const sourceMp4 = document.createElement("source");
-      sourceMp4.src = options.videoBase + name + ".mp4";
-      sourceMp4.type = "video/mp4";
-      v.appendChild(sourceWebm);
-      v.appendChild(sourceMp4);
-      v.muted = true;
-      v.defaultMuted = true;
-      v.loop = true;
-      v.playsInline = true;
-      v.setAttribute("playsinline", "");
-      v.preload = "auto";
-      v.crossOrigin = "anonymous";
-      videoPool.appendChild(v);
-      videoEls[name] = v;
-      return v;
-    }
-
-    function loadVideo(name) {
-      if (loadingPromises[name]) return loadingPromises[name];
-      const v = getOrCreateVideo(name);
-      if (v.readyState >= 2) {
-        loadingPromises[name] = Promise.resolve(v);
-        return loadingPromises[name];
-      }
-      loadingPromises[name] = new Promise((resolve) => {
-        const onReady = () => resolve(v);
-        v.addEventListener("loadeddata", onReady, { once: true });
-        v.addEventListener("error", () => {
-          console.warn("[mascot] failed to load clip:", name, v.error);
-          resolve(v); // fail-soft: continue rather than hang the state machine
-        }, { once: true });
-        v.load();
-        setTimeout(() => resolve(v), 8000); // safety net
-      });
-      return loadingPromises[name];
-    }
-
-    function pickVariant(stateKey) {
-      const arr = GESTURES[stateKey].variants;
-      // `pin` keeps one clip per gesture so we never fetch/decode a fresh
-      // variant on every trigger — that churn is what made roaming stutter.
-      if (options.pin) return arr[0];
-      return arr[Math.floor(Math.random() * arr.length)];
-    }
-
-    // ---- state machine ----
-    let currentName = null;
-    let currentState = "idle";
     let destroyed = false;
-    let suspended = false; // true when off-screen / tab hidden — render loop fully stops
+    let cleanupFallback = null;
+    let api = null;
 
-    let lastInteractionAt = performance.now();
-    let ambientTimer = null;
-    let spontaneousTimer = null;
-    let returnToIdleTimer = null;
-
-    function emitState(stateKey) {
-      if (options.onStateChange) options.onStateChange(stateKey);
-    }
-    function emitSpeech(stateKey) {
-      const lines = SPEECH_LINES[stateKey];
-      const text = lines && lines.length ? lines[Math.floor(Math.random() * lines.length)] : null;
-      if (options.onSpeech) options.onSpeech(text);
-    }
-
-    async function playState(stateKey, { speak = true, isUserTriggered = false } = {}) {
-      if (destroyed) return;
-      const variant = pickVariant(stateKey);
-      const video = await loadVideo(variant);
-      if (destroyed) return;
-
-      // pause whatever was playing before (saves decode cost — only the
-      // active clip should ever be decoding)
-      if (currentName && videoEls[currentName] && currentName !== variant) {
-        videoEls[currentName].pause();
-      }
-
-      video.currentTime = 0;
-      const p = video.play();
-      if (p && p.catch) p.catch(() => {});
-
-      currentName = variant;
-      currentState = stateKey;
-      emitState(stateKey);
-      if (speak) emitSpeech(stateKey);
-      else emitSpeech("idle"); // clears any lingering bubble
-      if (options.fx && options.onGestureFX) options.onGestureFX(stateKey);
-
-      if (isUserTriggered) lastInteractionAt = performance.now();
-
-      clearTimeout(returnToIdleTimer);
-      if (ONE_SHOT_STATES.has(stateKey)) {
-        const durMs = (isFinite(video.duration) && video.duration > 0 ? video.duration : 3) * 1000;
-        returnToIdleTimer = setTimeout(() => {
-          if (currentState === stateKey) playState("idle", { speak: false });
-        }, Math.min(durMs, 4200));
-      }
-    }
-
-    function triggerGesture(stateKey, fromUser = true) {
-      if (!GESTURES[stateKey] || destroyed) return;
-      playState(stateKey, { speak: true, isUserTriggered: fromUser });
-      restartSpontaneousTimer();
-    }
-
-    function triggerRandomReaction() {
-      const choice = REACTION_STATES[Math.floor(Math.random() * REACTION_STATES.length)];
-      triggerGesture(choice, true);
-    }
-
-    function restartAmbientTimer() {
-      clearTimeout(ambientTimer);
-      if (!options.ambient || destroyed || suspended) return;
-      const delay = 8000 + Math.random() * 6000;
-      ambientTimer = setTimeout(() => {
-        if (currentState === "idle" && !suspended) playState("idle", { speak: false });
-        restartAmbientTimer();
-      }, delay);
-    }
-
-    function restartSpontaneousTimer() {
-      clearTimeout(spontaneousTimer);
-      if (!options.spontaneous || destroyed) return;
-      spontaneousTimer = setTimeout(() => {
-        if (!suspended) {
-          const quietFor = performance.now() - lastInteractionAt;
-          if (quietFor > 20000 && currentState === "idle") {
-            const choice = Math.random() < 0.5 ? "wave" : "groove";
-            playState(choice, { speak: true });
-            clearTimeout(returnToIdleTimer);
-            returnToIdleTimer = setTimeout(() => playState("idle", { speak: false }), 4200);
-          }
-        }
-        restartSpontaneousTimer();
-      }, 4000);
-    }
-
-    // ---- render loop ----
-    // Uses requestVideoFrameCallback when available so we only do GL work
-    // when the video actually has a new decoded frame (~24fps), instead of
-    // redrawing on every display vsync (60-144fps) for no visual benefit.
-    let rafHandle = null;
-    let vfcHandle = null;
-
-    function uploadAndDraw(video) {
-      resizeCanvasToDisplaySize();
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.uniform1i(uTexLoc, 0);
-      gl.uniform1f(uLoLoc, keyLo);
-      gl.uniform1f(uHiLoc, keyHi);
-      gl.uniform1f(uSpillLoc, keySpill);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-    }
-
-    function scheduleNextFrame() {
-      if (destroyed || suspended) return;
-      const video = videoEls[currentName];
-      if (!video) {
-        rafHandle = requestAnimationFrame(scheduleNextFrame);
+    const ready = (async () => {
+      let THREE;
+      try {
+        THREE = await loadThree();
+      } catch (error) {
+        console.error("[avatar3d] Three.js failed to load", error);
+        cleanupFallback = fallbackCharacter(container);
         return;
       }
-      if (typeof video.requestVideoFrameCallback === "function") {
-        vfcHandle = video.requestVideoFrameCallback(() => {
-          try {
-            if (video.readyState >= 2) uploadAndDraw(video);
-          } catch (err) {
-            console.error("[mascot] render error:", err);
-          }
-          scheduleNextFrame();
-        });
-      } else {
-        // Fallback for browsers without requestVideoFrameCallback (older
-        // Safari/Firefox): throttle to ~24fps manually rather than every vsync.
-        rafHandle = requestAnimationFrame(() => {
-          try {
-            if (video.readyState >= 2) uploadAndDraw(video);
-          } catch (err) {
-            console.error("[mascot] render error:", err);
-          }
-          setTimeout(scheduleNextFrame, 1000 / 24);
-        });
-      }
-    }
+      if (destroyed) return;
 
-    function startRenderLoop() {
-      if (suspended || destroyed) return;
-      scheduleNextFrame();
-    }
+      const lowPower = lowPowerDevice();
+      const reduced = prefersReducedMotion();
 
-    function stopRenderLoop() {
-      if (rafHandle) cancelAnimationFrame(rafHandle);
-      if (vfcHandle && videoEls[currentName] && videoEls[currentName].cancelVideoFrameCallback) {
-        videoEls[currentName].cancelVideoFrameCallback(vfcHandle);
-      }
-      rafHandle = null;
-      vfcHandle = null;
-    }
-
-    // ---- visibility / off-screen suspension ----
-    // Fully stop decode + render work when the widget isn't visible, so a
-    // mascot scrolled out of view or in a backgrounded tab costs nothing.
-    function suspend() {
-      if (suspended) return;
-      suspended = true;
-      stopRenderLoop();
-      Object.values(videoEls).forEach((v) => v.pause());
-      clearTimeout(ambientTimer);
-      clearTimeout(spontaneousTimer);
-    }
-    function resume() {
-      if (!suspended || destroyed) return;
-      suspended = false;
-      const video = videoEls[currentName];
-      if (video) { const p = video.play(); if (p && p.catch) p.catch(() => {}); }
-      startRenderLoop();
-      restartAmbientTimer();
-      restartSpontaneousTimer();
-    }
-
-    let intersectionObs = null;
-    if ("IntersectionObserver" in global) {
-      intersectionObs = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) resume();
-          else suspend();
-        });
-      }, { threshold: 0.05 });
-      intersectionObs.observe(container);
-    }
-
-    function onVisibilityChange() {
-      if (document.hidden) suspend();
-      else if (intersectionObs) {
-        // re-check actual on-screen-ness rather than blindly resuming
-        const rect = container.getBoundingClientRect();
-        const onScreen = rect.bottom > 0 && rect.top < global.innerHeight;
-        if (onScreen) resume();
-      } else {
-        resume();
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    let resizeObs = null;
-    if ("ResizeObserver" in global) {
-      resizeObs = new ResizeObserver(() => resizeCanvasToDisplaySize());
-      resizeObs.observe(container);
-    } else {
-      global.addEventListener("resize", resizeCanvasToDisplaySize);
-    }
-
-    // ---- public API ----
-    function setKeyThresholds(lo, hi) {
-      keyLo = lo;
-      keyHi = hi;
-    }
-
-    function destroy() {
-      destroyed = true;
-      stopRenderLoop();
-      clearTimeout(ambientTimer);
-      clearTimeout(spontaneousTimer);
-      clearTimeout(returnToIdleTimer);
-      if (intersectionObs) intersectionObs.disconnect();
-      if (resizeObs) resizeObs.disconnect();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      Object.values(videoEls).forEach((v) => {
-        v.pause();
-        v.removeAttribute("src");
-        v.load();
+      const renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: !lowPower,
+        powerPreference: "high-performance",
+        premultipliedAlpha: true,
       });
-      container.innerHTML = "";
-    }
+      renderer.setClearColor(0x000000, 0);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
+      renderer.shadowMap.enabled = false;
+      renderer.domElement.setAttribute("aria-hidden", "true");
+      container.appendChild(renderer.domElement);
 
-    // ---- boot ----
-    resizeCanvasToDisplaySize();
-    let bootPromise = Promise.resolve();
-    if (options.autoIdle) {
-      bootPromise = (async () => {
-        currentName = pickVariant("idle");
-        const v = await loadVideo(currentName);
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(24, 1, 0.1, 50);
+      camera.position.set(0, 0.05, 15.8);
+      camera.lookAt(0, -0.05, 0);
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x17191d, 2.2);
+      scene.add(hemi);
+      const key = new THREE.DirectionalLight(0xffffff, 2.35);
+      key.position.set(4, 7, 8);
+      scene.add(key);
+      const rim = new THREE.DirectionalLight(0xb8d8ff, 1.05);
+      rim.position.set(-5, 4, -2);
+      scene.add(rim);
+
+      const palette = {
+        skin: 0xb96f43,
+        skinLight: 0xc98255,
+        hair: 0x090a0d,
+        jacket: 0x25272b,
+        jacket2: 0x34373c,
+        shirt: 0xf2f2ef,
+        pants: 0x17191d,
+        shoe: 0xf5f6f7,
+        sole: 0xcfd2d5,
+        dark: 0x111317,
+        eye: 0x17110d,
+        blue: 0x28a7ff,
+      };
+
+      const mat = {};
+      const material = (name, color, roughness = 0.72, metalness = 0.0) => {
+        mat[name] = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+        return mat[name];
+      };
+      material("skin", palette.skin, 0.8);
+      material("skinLight", palette.skinLight, 0.8);
+      material("hair", palette.hair, 0.58);
+      material("jacket", palette.jacket, 0.72);
+      material("jacket2", palette.jacket2, 0.7);
+      material("shirt", palette.shirt, 0.82);
+      material("pants", palette.pants, 0.78);
+      material("shoe", palette.shoe, 0.65);
+      material("sole", palette.sole, 0.75);
+      material("dark", palette.dark, 0.55);
+      material("eyeWhite", 0xf8f4ee, 0.6);
+      material("eye", palette.eye, 0.5);
+      material("blue", palette.blue, 0.52, 0.05);
+
+      const rig = {};
+      const avatar = new THREE.Group();
+      avatar.position.y = -0.25;
+      scene.add(avatar);
+      rig.avatar = avatar;
+
+      const geo = {
+        sphere16: new THREE.SphereGeometry(1, 16, 12),
+        sphere20: new THREE.SphereGeometry(1, 20, 14),
+        box: new THREE.BoxGeometry(1, 1, 1),
+        cyl12: new THREE.CylinderGeometry(1, 1, 1, 12),
+        torus12: new THREE.TorusGeometry(1, 0.09, 6, 18),
+      };
+
+      const mesh = (geometry, materialRef, scale, position, parent = avatar) => {
+        const m = new THREE.Mesh(geometry, materialRef);
+        if (scale) m.scale.set(scale[0], scale[1], scale[2]);
+        if (position) m.position.set(position[0], position[1], position[2]);
+        parent.add(m);
+        return m;
+      };
+
+      const group = (position, parent = avatar) => {
+        const g = new THREE.Group();
+        if (position) g.position.set(position[0], position[1], position[2]);
+        parent.add(g);
+        return g;
+      };
+
+      function limb(parent, length, radius, materialRef, childY = -0.5) {
+        return mesh(geo.sphere16, materialRef, [radius, length * 0.5, radius], [0, childY * length, 0], parent);
+      }
+
+      rig.body = group([0, 0.35, 0]);
+      mesh(geo.sphere20, mat.pants, [0.82, 0.45, 0.48], [0, -0.85, 0], rig.body);
+      mesh(geo.sphere20, mat.jacket, [1.12, 1.32, 0.55], [0, 0.20, 0], rig.body);
+      mesh(geo.box, mat.shirt, [0.52, 1.45, 0.10], [0, 0.22, 0.53], rig.body);
+      mesh(geo.box, mat.jacket2, [0.34, 1.25, 0.09], [-0.60, 0.16, 0.55], rig.body).rotation.z = -0.08;
+      mesh(geo.box, mat.jacket2, [0.34, 1.25, 0.09], [0.60, 0.16, 0.55], rig.body).rotation.z = 0.08;
+      const zipper = mesh(geo.box, mat.dark, [0.035, 1.20, 0.035], [0, 0.1, 0.68], rig.body);
+      zipper.rotation.z = 0.015;
+      mesh(geo.box, mat.blue, [0.045, 0.32, 0.035], [0.56, 0.30, 0.69], rig.body);
+
+      mesh(geo.cyl12, mat.skin, [0.30, 0.38, 0.30], [0, 1.64, 0], rig.body);
+      rig.head = group([0, 2.28, 0], rig.body);
+      const headMesh = mesh(geo.sphere20, mat.skin, [0.88, 1.02, 0.82], [0, 0, 0], rig.head);
+      headMesh.rotation.x = -0.02;
+      mesh(geo.sphere16, mat.skin, [0.16, 0.29, 0.14], [-0.88, -0.03, 0], rig.head);
+      mesh(geo.sphere16, mat.skin, [0.16, 0.29, 0.14], [0.88, -0.03, 0], rig.head);
+
+      const hairClusters = [
+        [-0.55, 0.82, -0.06, 0.52, 0.34, 0.50, -0.20],
+        [-0.12, 0.94, -0.08, 0.62, 0.38, 0.53, -0.08],
+        [ 0.34, 0.91, -0.10, 0.58, 0.36, 0.51,  0.12],
+        [ 0.63, 0.68, -0.14, 0.40, 0.39, 0.43,  0.22],
+        [-0.72, 0.55, -0.18, 0.34, 0.45, 0.39, -0.18],
+        [ 0.10, 0.70,  0.12, 0.58, 0.27, 0.30,  0.06],
+      ];
+      hairClusters.forEach(([x,y,z,sx,sy,sz,rz]) => {
+        const h = mesh(geo.sphere16, mat.hair, [sx,sy,sz], [x,y,z], rig.head);
+        h.rotation.z = rz;
+      });
+
+      rig.leftEye = group([-0.35, 0.14, 0.74], rig.head);
+      rig.rightEye = group([0.35, 0.14, 0.74], rig.head);
+      [rig.leftEye, rig.rightEye].forEach((eye) => {
+        mesh(geo.sphere16, mat.eyeWhite, [0.20, 0.13, 0.07], [0,0,0], eye);
+        const pupil = mesh(geo.sphere16, mat.eye, [0.075, 0.075, 0.045], [0, -0.005, 0.066], eye);
+        eye.userData.pupil = pupil;
+      });
+
+      const lb = mesh(geo.box, mat.hair, [0.26, 0.045, 0.04], [-0.35, 0.38, 0.80], rig.head);
+      const rb = mesh(geo.box, mat.hair, [0.26, 0.045, 0.04], [ 0.35, 0.38, 0.80], rig.head);
+      lb.rotation.z = 0.05; rb.rotation.z = -0.05;
+      rig.leftBrow = lb; rig.rightBrow = rb;
+
+      const nose = mesh(geo.sphere16, mat.skinLight, [0.10, 0.18, 0.12], [0, -0.08, 0.82], rig.head);
+      nose.rotation.x = 0.15;
+
+      function glassesFrame(x) {
+        const frame = group([x, 0.13, 0.88], rig.head);
+        mesh(geo.box, mat.dark, [0.28,0.025,0.025], [0,0.13,0], frame);
+        mesh(geo.box, mat.dark, [0.28,0.025,0.025], [0,-0.13,0], frame);
+        mesh(geo.box, mat.dark, [0.025,0.15,0.025], [-0.28,0,0], frame);
+        mesh(geo.box, mat.dark, [0.025,0.15,0.025], [0.28,0,0], frame);
+        return frame;
+      }
+      glassesFrame(-0.35); glassesFrame(0.35);
+      mesh(geo.box, mat.dark, [0.08,0.025,0.025], [0,0.13,0.88], rig.head);
+      mesh(geo.box, mat.dark, [0.32,0.024,0.024], [-0.79,0.17,0.70], rig.head).rotation.y = -0.55;
+      mesh(geo.box, mat.dark, [0.32,0.024,0.024], [ 0.79,0.17,0.70], rig.head).rotation.y = 0.55;
+
+      rig.mouth = mesh(geo.box, mat.dark, [0.28, 0.035, 0.035], [0, -0.40, 0.81], rig.head);
+      rig.mouth.rotation.x = -0.08;
+
+      function makeArm(side) {
+        const s = side === "left" ? -1 : 1;
+        const shoulder = group([s * 1.08, 0.93, 0], rig.body);
+        limb(shoulder, 1.34, 0.30, mat.jacket2);
+        const elbow = group([0, -1.26, 0], shoulder);
+        limb(elbow, 1.18, 0.27, mat.jacket2);
+        const hand = mesh(geo.sphere16, mat.skin, [0.29,0.37,0.22], [0,-1.16,0], elbow);
+        hand.rotation.x = 0.08;
+        return { shoulder, elbow, hand };
+      }
+      const leftArm = makeArm("left");
+      const rightArm = makeArm("right");
+      rig.leftShoulder = leftArm.shoulder; rig.leftElbow = leftArm.elbow; rig.leftHand = leftArm.hand;
+      rig.rightShoulder = rightArm.shoulder; rig.rightElbow = rightArm.elbow; rig.rightHand = rightArm.hand;
+      mesh(geo.box, mat.dark, [0.34,0.10,0.27], [0,-0.92,0], rig.leftElbow);
+
+      function makeLeg(side) {
+        const s = side === "left" ? -1 : 1;
+        const hip = group([s * 0.48, -0.48, 0], rig.body);
+        limb(hip, 1.62, 0.38, mat.pants);
+        const knee = group([0, -1.54, 0], hip);
+        limb(knee, 1.46, 0.34, mat.pants);
+        const ankle = group([0, -1.40, 0], knee);
+        const shoe = mesh(geo.box, mat.shoe, [0.48,0.25,0.76], [0,-0.16,0.28], ankle);
+        shoe.rotation.x = 0.04;
+        mesh(geo.box, mat.sole, [0.50,0.07,0.80], [0,-0.42,0.28], ankle);
+        mesh(geo.box, mat.blue, [0.14,0.08,0.10], [s * 0.22,-0.25,-0.40], ankle);
+        return { hip, knee, ankle };
+      }
+      const leftLeg = makeLeg("left");
+      const rightLeg = makeLeg("right");
+      rig.leftHip = leftLeg.hip; rig.leftKnee = leftLeg.knee; rig.leftAnkle = leftLeg.ankle;
+      rig.rightHip = rightLeg.hip; rig.rightKnee = rightLeg.knee; rig.rightAnkle = rightLeg.ankle;
+      avatar.scale.setScalar(0.92);
+
+      const neutral = {
+        bodyX: 0, bodyZ: 0, bodyY: 0.35,
+        headX: 0, headY: 0, headZ: 0,
+        lsX: 0.05, lsY: 0, lsZ: -0.10, leX: 0.06, leZ: -0.03,
+        rsX: 0.05, rsY: 0, rsZ:  0.10, reX: 0.06, reZ:  0.03,
+        lhX: 0, lkX: 0, laX: 0,
+        rhX: 0, rkX: 0, raX: 0,
+      };
+
+      let currentState = "idle";
+      let stateStarted = performance.now() / 1000;
+      let speaking = false;
+      let listening = false;
+      let audioLevel = 0;
+      let inputLevel = 0;
+      let displayedAudio = 0;
+      let lastFrame = performance.now();
+      let lastDraw = 0;
+      let raf = 0;
+      let visible = !document.hidden;
+      let oneShotTimer = 0;
+      let blinkUntil = 0;
+      let nextBlink = 2 + Math.random() * 3;
+      const mouse = { x: 0, y: 0 };
+      let pointerActive = false;
+
+      function setState(state) {
+        if (!STATES.includes(state) || destroyed) return;
+        if (state === currentState && state !== "talk" && state !== "walk") return;
+        currentState = state;
+        stateStarted = performance.now() / 1000;
+        if (options.onStateChange) options.onStateChange(state);
+        clearTimeout(oneShotTimer);
+        if (state === "wave" || state === "point") {
+          oneShotTimer = setTimeout(() => {
+            if (currentState === state) setState("idle");
+          }, state === "wave" ? 2700 : 2400);
+        }
+      }
+
+      function targetPose(state, t) {
+        const p = { ...neutral };
+        const beat = Math.sin(t * 2.0);
+        const fast = Math.sin(t * 7.2);
+        switch (state) {
+          case "wave":
+            p.rsZ = -2.65; p.rsX = -0.05; p.reZ = -0.35 + Math.sin(t * 7.5) * 0.35; p.reX = -0.25; p.headZ = -0.08;
+            break;
+          case "point":
+            p.rsZ = -1.46; p.rsY = -0.22; p.reZ = -0.10; p.reX = -0.10; p.bodyZ = -0.035; p.headY = -0.13;
+            break;
+          case "sit":
+            p.bodyY = -0.55; p.bodyX = -0.03; p.lhX = -1.34; p.rhX = -1.34; p.lkX = 1.58; p.rkX = 1.58;
+            p.laX = -0.22; p.raX = -0.22; p.lsZ = -0.30; p.rsZ = 0.30; p.leX = -0.85; p.reX = -0.85;
+            break;
+          case "think":
+            p.rsZ = -0.42; p.rsX = -0.90; p.rsY = -0.18; p.reX = -1.74; p.reZ = 0.30;
+            p.lsZ = -0.22; p.lsX = -0.42; p.leX = -1.25; p.leZ = -0.18; p.headZ = -0.12; p.headY = -0.16;
+            break;
+          case "listen":
+            p.headZ = -0.10 + beat * 0.025; p.headY = -0.08; p.lsZ = -0.16; p.rsZ = 0.16; p.bodyZ = beat * 0.01;
+            break;
+          case "talk": {
+            const g = Math.sin(t * 3.4);
+            p.lsZ = -0.30 - g * 0.28; p.rsZ = 0.28 + g * 0.24; p.leX = -0.55 + Math.sin(t * 4.1) * 0.25;
+            p.reX = -0.45 + Math.cos(t * 3.7) * 0.22; p.headZ = Math.sin(t * 1.8) * 0.035; p.headY = Math.sin(t * 1.15) * 0.04;
+            break;
+          }
+          case "groove":
+            p.bodyZ = Math.sin(t * 3.3) * 0.13; p.lsZ = -0.55 + Math.sin(t * 5.0) * 0.45; p.rsZ = 0.55 + Math.sin(t * 5.0 + Math.PI) * 0.45;
+            p.lhX = Math.sin(t * 4.0) * 0.18; p.rhX = Math.sin(t * 4.0 + Math.PI) * 0.18;
+            break;
+          case "walk":
+            p.bodyY = 0.35 + Math.abs(fast) * 0.08; p.lhX = fast * 0.70; p.rhX = -fast * 0.70;
+            p.lkX = Math.max(0, -fast) * 0.70; p.rkX = Math.max(0, fast) * 0.70; p.lsX = -fast * 0.38; p.rsX = fast * 0.38;
+            p.leX = -0.25; p.reX = -0.25; p.bodyZ = Math.sin(t * 7.2) * 0.022;
+            break;
+          default:
+            p.bodyY = 0.35 + Math.sin(t * 1.7) * 0.025; p.headY = Math.sin(t * 0.65) * 0.045; p.headZ = Math.sin(t * 0.85) * 0.025;
+            break;
+        }
+        return p;
+      }
+
+      function applyPose(p, dt) {
+        const k = damp(11, dt);
+        const rot = (obj, x, y, z) => {
+          obj.rotation.x = lerp(obj.rotation.x, x, k);
+          obj.rotation.y = lerp(obj.rotation.y, y, k);
+          obj.rotation.z = lerp(obj.rotation.z, z, k);
+        };
+        rig.body.position.y = lerp(rig.body.position.y, p.bodyY, k);
+        rot(rig.body, p.bodyX, 0, p.bodyZ); rot(rig.head, p.headX, p.headY, p.headZ);
+        rot(rig.leftShoulder, p.lsX, p.lsY, p.lsZ); rot(rig.leftElbow, p.leX, 0, p.leZ);
+        rot(rig.rightShoulder, p.rsX, p.rsY, p.rsZ); rot(rig.rightElbow, p.reX, 0, p.reZ);
+        rot(rig.leftHip, p.lhX, 0, 0); rot(rig.leftKnee, p.lkX, 0, 0); rot(rig.leftAnkle, p.laX, 0, 0);
+        rot(rig.rightHip, p.rhX, 0, 0); rot(rig.rightKnee, p.rkX, 0, 0); rot(rig.rightAnkle, p.raX, 0, 0);
+      }
+
+      function updateFace(t, dt) {
+        displayedAudio = lerp(displayedAudio, speaking ? clamp(audioLevel * 1.6, 0.08, 1) : 0, damp(18, dt));
+        const talking = speaking || currentState === "talk";
+        const synthetic = talking ? (0.16 + Math.abs(Math.sin(t * 8.7)) * 0.30) : 0;
+        const open = clamp(Math.max(displayedAudio, synthetic), 0, 1);
+        rig.mouth.scale.y = lerp(rig.mouth.scale.y, 0.72 + open * 4.8, damp(24, dt));
+        rig.mouth.scale.x = lerp(rig.mouth.scale.x, 1 - open * 0.18, damp(16, dt));
+
+        if (t > nextBlink) { blinkUntil = t + 0.12; nextBlink = t + 2.2 + Math.random() * 3.8; }
+        const blink = t < blinkUntil ? 0.08 : 1;
+        rig.leftEye.scale.y = lerp(rig.leftEye.scale.y, blink, damp(35, dt));
+        rig.rightEye.scale.y = lerp(rig.rightEye.scale.y, blink, damp(35, dt));
+
+        const attentive = listening ? clamp(inputLevel, 0, 1) : 0;
+        rig.leftBrow.rotation.z = 0.05 + attentive * 0.05;
+        rig.rightBrow.rotation.z = -0.05 - attentive * 0.05;
+      }
+
+      function updateLook(dt) {
+        if (!pointerActive || speaking || listening) return;
+        const k = damp(5, dt);
+        const tx = clamp(mouse.x, -1, 1) * 0.10;
+        const ty = clamp(mouse.y, -1, 1) * 0.06;
+        rig.head.rotation.y = lerp(rig.head.rotation.y, -tx, k);
+        rig.head.rotation.x = lerp(rig.head.rotation.x, ty, k);
+        [rig.leftEye, rig.rightEye].forEach((eye) => {
+          const pupil = eye.userData.pupil;
+          if (pupil) {
+            pupil.position.x = lerp(pupil.position.x, tx * 0.55, k);
+            pupil.position.y = lerp(pupil.position.y, -ty * 0.45, k);
+          }
+        });
+      }
+
+      function resize() {
         if (destroyed) return;
-        const p = v.play();
-        if (p && p.catch) p.catch(() => {});
-        currentState = "idle";
-        emitState("idle");
-        startRenderLoop();
-        restartAmbientTimer();
-        restartSpontaneousTimer();
+        const w = Math.max(1, container.clientWidth);
+        const h = Math.max(1, container.clientHeight);
+        const dprCap = lowPower ? 1.0 : (w < 130 ? 1.25 : 1.5);
+        renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, dprCap));
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      }
 
-        // Prefetch the *other* idle variant and the point gesture (common
-        // hover target) shortly after first paint — low priority, doesn't
-        // block anything the user is looking at.
-        setTimeout(() => {
-          if (destroyed) return;
-          const otherIdle = GESTURES.idle.variants.find((n) => n !== currentName);
-          if (otherIdle) loadVideo(otherIdle);
-          loadVideo(pickVariant("point"));
-        }, 1500);
-      })();
-    }
+      const resizeObserver = "ResizeObserver" in global ? new ResizeObserver(resize) : null;
+      if (resizeObserver) resizeObserver.observe(container); else global.addEventListener("resize", resize);
+      resize();
 
-    return {
-      ready: bootPromise,
-      trigger: triggerGesture,
-      triggerRandom: triggerRandomReaction,
-      goIdle: () => playState("idle", { speak: false }),
-      // Warm pinned clips so switches are instant (no first-use fetch/decode
-      // hitch). Pass a list to warm only those gestures; defaults to all.
-      preload: (keys) => (keys || Object.keys(GESTURES)).forEach((k) => GESTURES[k] && loadVideo(GESTURES[k].variants[0])),
-      setKeyThresholds,
-      states: Object.keys(GESTURES),
-      destroy,
-      // exposed for advanced/debug use
-      _internal: { videoEls, getCurrentState: () => currentState },
+      function onPointerMove(event) {
+        const r = container.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        mouse.x = ((event.clientX - r.left) / r.width) * 2 - 1;
+        mouse.y = ((event.clientY - r.top) / r.height) * 2 - 1;
+        pointerActive = true;
+      }
+      function onPointerLeave() { pointerActive = false; }
+      container.addEventListener("pointermove", onPointerMove, { passive: true });
+      container.addEventListener("pointerleave", onPointerLeave, { passive: true });
+
+      function onVisibility() {
+        visible = !document.hidden;
+        if (visible && !raf) { lastFrame = performance.now(); raf = requestAnimationFrame(frame); }
+      }
+      document.addEventListener("visibilitychange", onVisibility);
+
+      function frame(now) {
+        raf = 0;
+        if (destroyed || !visible) return;
+        const dt = Math.min(0.05, Math.max(0.001, (now - lastFrame) / 1000));
+        lastFrame = now;
+        const t = now / 1000;
+        const active = speaking || listening || currentState === "walk" || currentState === "wave" || currentState === "point" || currentState === "groove";
+        const fps = reduced ? 20 : (active ? 45 : 30);
+        const minGap = 1000 / fps;
+        if (now - lastDraw >= minGap) {
+          lastDraw = now;
+          const hostWalking = !!container.closest?.(".m-char")?.classList.contains("walking");
+          const effectiveState = hostWalking ? "walk" : currentState;
+          const p = targetPose(effectiveState, t - stateStarted);
+          applyPose(p, dt); updateFace(t, dt); updateLook(dt); renderer.render(scene, camera);
+        }
+        raf = requestAnimationFrame(frame);
+      }
+      raf = requestAnimationFrame(frame);
+
+      api._install({
+        trigger: (state) => setState(state),
+        goIdle: () => setState("idle"),
+        supports: (state) => STATES.includes(state),
+        preload: () => Promise.resolve(),
+        setSpeaking: (v) => {
+          speaking = !!v;
+          if (speaking && currentState !== "walk") setState("talk");
+          else if (!speaking && listening && currentState !== "walk") setState("listen");
+        },
+        setListening: (v) => {
+          listening = !!v;
+          if (listening && !speaking && currentState !== "walk") setState("listen");
+        },
+        setAudioLevel: (v) => { audioLevel = clamp(Number(v) || 0, 0, 1); },
+        setInputLevel: (v) => { inputLevel = clamp(Number(v) || 0, 0, 1); },
+        destroy: () => {
+          destroyed = true; clearTimeout(oneShotTimer); if (raf) cancelAnimationFrame(raf);
+          document.removeEventListener("visibilitychange", onVisibility);
+          container.removeEventListener("pointermove", onPointerMove); container.removeEventListener("pointerleave", onPointerLeave);
+          if (resizeObserver) resizeObserver.disconnect(); else global.removeEventListener("resize", resize);
+          renderer.dispose(); Object.values(geo).forEach((g) => g.dispose && g.dispose()); Object.values(mat).forEach((m) => m.dispose && m.dispose());
+          if (global.PriyanshuAvatar3D === api) delete global.PriyanshuAvatar3D;
+          renderer.domElement.remove();
+        },
+        states: STATES.slice(),
+        _internal: { rig, renderer, scene, getCurrentState: () => currentState },
+      });
+
+      global.PriyanshuAvatar3D = api;
+      if (options.onStateChange) options.onStateChange(currentState);
+    })();
+
+    const pending = [];
+    const impl = {};
+    api = {
+      ready,
+      states: STATES.slice(),
+      trigger(state) { if (impl.trigger) impl.trigger(state); else pending.push(["trigger", [state]]); },
+      goIdle() { if (impl.goIdle) impl.goIdle(); else pending.push(["goIdle", []]); },
+      preload() { return Promise.resolve(); },
+      supports(state) { return impl.supports ? impl.supports(state) : STATES.includes(state); },
+      setSpeaking(v) { if (impl.setSpeaking) impl.setSpeaking(v); else pending.push(["setSpeaking", [v]]); },
+      setListening(v) { if (impl.setListening) impl.setListening(v); else pending.push(["setListening", [v]]); },
+      setAudioLevel(v) { if (impl.setAudioLevel) impl.setAudioLevel(v); },
+      setInputLevel(v) { if (impl.setInputLevel) impl.setInputLevel(v); },
+      setKeyThresholds() {},
+      destroy() { destroyed = true; if (impl.destroy) impl.destroy(); if (cleanupFallback) cleanupFallback(); },
+      _install(next) {
+        Object.assign(impl, next); api.states = next.states || api.states; api._internal = next._internal;
+        while (pending.length) {
+          const [name, args] = pending.shift();
+          try { impl[name]?.(...args); } catch (e) { console.warn("[avatar3d] queued call failed", name, e); }
+        }
+      },
+      _internal: null,
     };
+
+    return api;
   }
 
-  global.MascotEngine = { createMascot, GESTURES };
+  global.MascotEngine = { createMascot, GESTURES: Object.fromEntries(STATES.map((s) => [s, { label: s }])) };
 })(window);
