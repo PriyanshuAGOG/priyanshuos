@@ -85,7 +85,7 @@ function createClientTools() {
       return `Switched to ${key} mode`;
     },
     avatar_gesture: ({ gesture } = {}) => {
-      const allowed = new Set(['idle', 'wave', 'point', 'sit', 'think', 'listen', 'talk', 'groove']);
+      const allowed = new Set(['idle', 'wave', 'highfive', 'walk', 'point', 'sit', 'think', 'listen', 'talk', 'groove']);
       const key = String(gesture || '').toLowerCase();
       if (!allowed.has(key)) return `Unsupported gesture: ${key}`;
       window.PriyanshuMascot?.gesture?.(key);
@@ -148,7 +148,8 @@ function MascotBridge() {
         try {
           window.PriyanshuMascot?.elevenlabs?.onStarting?.();
           if (!navigator.mediaDevices?.getUserMedia) throw new Error('microphone API unavailable');
-          await navigator.mediaDevices.getUserMedia({ audio: true });
+          const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          permissionStream.getTracks().forEach(track => track.stop());
           let transport;
           try {
             transport = await connectSecurely();
@@ -204,7 +205,13 @@ function MascotBridge() {
   }, [conversation.isListening]);
 
   useEffect(() => {
-    if (conversation.status !== 'connected') return undefined;
+    if (conversation.status !== 'connected') {
+      window.PriyanshuAvatar3D?.setAudioLevel?.(0);
+      window.PriyanshuAvatar3D?.setInputLevel?.(0);
+      window.PriyanshuAvatar3D?.setSpeaking?.(false);
+      window.PriyanshuAvatar3D?.setListening?.(false);
+      return undefined;
+    }
     let raf = 0;
     let last = 0;
     const sample = (now) => {

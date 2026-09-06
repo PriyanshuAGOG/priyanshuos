@@ -5,8 +5,7 @@
    speaks in the first person and the visitor is effectively talking to him.
 
    SYSTEM
-   • Engine: WebGL2 chroma-key video mascot (mascot-engine.js), one pinned +
-     lazily warmed clip per gesture → smooth switches without startup spikes.
+   • Engine: articulated volumetric Three.js character, with blended joint poses.
    • Locomotion: time-based velocity (px/s) tuned to the walk clip's stride
      cadence, with ease-in/out. Frame-rate independent. Sleeps when at rest.
    • Choreographer: a per-section script. As you scroll, the mascot walks to a
@@ -77,13 +76,13 @@
 
   // ---------------------------------------------------------------- engine
   let mascot = null, gesture = "idle";
-  function setGesture(g) { if (g === gesture) return; gesture = g; if (mascot) mascot.trigger(g, false); }
+  function setGesture(g) { if (mascot && !mascot.supports(g)) return; gesture = g; if (mascot) mascot.trigger(g, false); }
 
   if (!window.MascotEngine || !window.MascotEngine.createMascot) {
     console.error("[mascot] mascot-engine.js not loaded"); veil.classList.add("hidden");
   } else {
     mascot = window.MascotEngine.createMascot(canvasWrap, {
-      videoBase: "assets/videos/", pin: true, ambient: false, spontaneous: false, fx: false,
+      pin: true, ambient: false, spontaneous: false, fx: false,
       onStateChange: () => {}, onSpeech: () => {},
     });
     mascot.ready.then(() => {
@@ -110,12 +109,9 @@
   let charW = 130, charH = 188, walkPxps = 170, curSpeed = 0, raf = null, lastT = 0;
   let onArrive = null, pendingGesture = "idle";
 
-  let hasWalk = false;
+  let hasWalk = true;
   async function probeWalk() {
-    for (const ext of ["webm", "mp4"]) {
-      try { const r = await fetch("assets/videos/walk_1." + ext, { method: "HEAD" }); if (r.ok) { hasWalk = true; break; } } catch (_) {}
-    }
-    if (hasWalk && mascot && mascot.preload) mascot.preload(["walk"]);
+    hasWalk = !!mascot?.supports('walk');
   }
 
   function measure() {
@@ -127,7 +123,7 @@
     const r = e.getBoundingClientRect();
     return {
       x: clamp(r.left + Math.min(r.width * 0.5, 70) - charW / 2, 6, window.innerWidth - charW - 6),
-      y: clamp(r.top - charH * 0.86, 6, window.innerHeight - charH - 6),
+      y: clamp(r.top - charH * (pendingGesture === 'sit' ? 0.55 : 0.95), 6, window.innerHeight - charH - 6),
     };
   }
   function besidePoint(e) {
@@ -178,7 +174,8 @@
         if (!convoActive) setGesture(hasWalk ? "walk" : "idle");
         if (Math.abs(dx) > 1.2) {
           const dir = dx > 0 ? 1 : -1;                 // clip is authored facing LEFT
-          facing = hasWalk ? (dir === 1 ? -1 : 1) : dir;
+          facing = 1;
+          mascot?.setFacing?.(dir);
           lean = hasWalk ? 0 : dir * 2;
         }
       }
@@ -261,6 +258,7 @@
     };
 
     if (tEl) {
+      pendingGesture = scene.gesture;
       const p = scene.place === "on" ? perchPointFor(tEl) : besidePoint(tEl);
       moveTo(p.x, p.y, { perch: scene.place === "on" ? tEl : null, gesture: scene.gesture, onArrive: showLine });
     } else {
@@ -294,6 +292,7 @@
     pos.x = clamp(window.innerWidth - 190, 20, window.innerWidth - charW - 20);
     pos.y = groundY(); target.x = pos.x; target.y = pos.y;
     charEl.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0) scaleX(1)`;
+    window.addEventListener("resize", onResize);
     if (reduce) { setGesture("idle"); return; }
 
     // Instant greeting — wave + welcome the moment the page is alive (no
@@ -302,7 +301,6 @@
     setTimeout(() => { showBubble({ text: "Heyo! Welcome to Priyanshu OS — I'm Priyanshu. Talk to me, or look around.", sticky: false }); }, 1000);
 
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onResize);
     armFidget();
     armVoiceAutostart();
     setTimeout(() => { activeId = activeSection(); runScene(activeId, true); }, 2600);
@@ -317,7 +315,8 @@
   function armVoiceAutostart() {
     if (voiceAutostartArmed || reduce || CFG.autostartVoice === false) return;
     voiceAutostartArmed = true;
-    const fire = () => {
+    const fire = (event) => {
+      if (event.target?.closest?.('.m-highfive')) return;
       if (voiceAutostartDone) return;
       voiceAutostartDone = true;
       window.removeEventListener("pointerdown", fire, true);
@@ -346,12 +345,25 @@
     measure();
     pos.x = clamp(pos.x, 4, window.innerWidth - charW - 4);
     pos.y = clamp(pos.y, 4, window.innerHeight - charH - 4);
+    target.x = clamp(target.x, 4, window.innerWidth - charW - 4);
+    target.y = clamp(target.y, 4, window.innerHeight - charH - 4);
+    charEl.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
+    if (raf) cancelAnimationFrame(raf);
+    raf = null;
     ensureTick();
   }
 
   charEl.addEventListener("mouseenter", () => { if (!convoActive && !moving) setGesture("point"); });
   charEl.addEventListener("mouseleave", () => { if (!convoActive && !moving && gesture === "point") setGesture(perched ? lastSceneGesture() : "idle"); });
   charEl.addEventListener("click", onMascotTap);
+  const highFive = el('button', 'm-highfive', '✋');
+  highFive.type = 'button'; highFive.setAttribute('aria-label', 'High five Priyanshu');
+  highFive.title = 'High five'; root.append(highFive);
+  highFive.addEventListener('click', () => {
+    if (convoActive || moving) return;
+    setGesture('highfive');
+    setTimeout(() => { if (gesture === 'highfive' && !convoActive && !moving) setGesture(perched ? lastSceneGesture() : 'idle'); }, 1800);
+  });
   charEl.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onMascotTap(); } });
   function lastSceneGesture() { const s = SCENES[lastSceneId]; return s ? s.gesture : "idle"; }
   function onMascotTap() {
